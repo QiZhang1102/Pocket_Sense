@@ -1,6 +1,9 @@
 node_modules/
 dist/
-test-results/
-playwright-report/
 *.tsbuildinfo
 .DS_Store
+test-results/
+playwright-report/
+output/
+.env*
+!.env.example

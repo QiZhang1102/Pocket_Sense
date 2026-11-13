@@ -1,183 +1,196 @@
-import { type RGB, type Vec3, lab, deltaE, parseHex, hex } from "./color";
-import { correct } from "./image";
-export type Patch = { ph: number; hex: string };
-export type Profile = {
+import {
+  hexToRgb,
+  rgbToHex,
+  rgbToLab,
+  type Lab,
+  type RGB,
+} from "./color";
+
+export type ReferencePoint = { ph: number; hex: string };
+export type ReferenceProfile = {
   id: string;
   name: string;
   synthetic: boolean;
-  basis: "standard" | "same-image";
-  patches: Patch[];
+  points: ReferencePoint[];
 };
-export const demoProfile: Profile = {
-  id: "demo-v1",
-  name: "Synthetic demo chart · Not manufacturer calibration",
+export type PhResult = {
+  estimate: number | null;
+  range: [number, number] | null;
+  nearest: ReferencePoint;
+  deltaE: number;
+  interpolated: boolean;
+  warnings: string[];
+  status: "matched" | "interpolated" | "ambiguous" | "unsupported";
+};
+export type ComparisonRow = { estimate: number; reference: number };
+
+export const DEMO_PROFILE: ReferenceProfile = {
+  id: "pocketsense-synthetic-v1",
+  name: "Synthetic demonstration",
   synthetic: true,
-  basis: "same-image",
-  patches: [
-    { ph: 4, hex: "#D98669" },
-    { ph: 5, hex: "#E5B76B" },
-    { ph: 6, hex: "#C9CB7C" },
-    { ph: 7, hex: "#94B889" },
-    { ph: 8, hex: "#70A79C" },
-    { ph: 9, hex: "#688FAD" },
-    { ph: 10, hex: "#827EAC" },
+  points: [
+    { ph: 2, hex: "#D85159" },
+    { ph: 4, hex: "#EB9752" },
+    { ph: 6, hex: "#E1C758" },
+    { ph: 7, hex: "#95B975" },
+    { ph: 8, hex: "#52A79A" },
+    { ph: 10, hex: "#4E83AF" },
+    { ph: 12, hex: "#75639F" },
   ],
 };
-export function validateProfile(input: unknown): Profile {
-  if (!input || typeof input !== "object")
-    throw new Error("Invalid reference profile JSON.");
-  const p = input as Profile;
-  if (typeof p.name !== "string" || !p.name.trim() || p.name.length > 80)
-    throw new Error("The profile name must contain 1–80 characters.");
-  if (p.basis !== "standard" && p.basis !== "same-image")
-    throw new Error("Choose a reference color source.");
-  if (
-    !Array.isArray(p.patches) ||
-    p.patches.length < 2 ||
-    p.patches.length > 30
-  )
-    throw new Error("Provide 2–30 color patches with pH labels.");
-  const patches = p.patches
-    .map((q) => {
-      if (
-        !q ||
-        typeof q.ph !== "number" ||
-        !Number.isFinite(q.ph) ||
-        q.ph < 0 ||
-        q.ph > 14
-      )
-        throw new Error("pH labels must be finite numbers between 0 and 14.");
-      return { ph: q.ph, hex: hex(parseHex(q.hex)) };
-    })
-    .sort((a, b) => a.ph - b.ph);
-  if (new Set(patches.map((q) => q.ph)).size !== patches.length)
-    throw new Error("pH labels must be unique.");
-  if (new Set(patches.map((q) => q.hex)).size !== patches.length)
-    throw new Error("Different pH labels cannot have identical colors.");
-  return {
-    id: typeof p.id === "string" ? p.id : crypto.randomUUID(),
-    name: p.name.trim(),
-    synthetic: p.synthetic === true,
-    basis: p.basis,
-    patches,
-  };
-}
-export type Match = {
-  estimate: number | null;
-  nearest: Patch;
-  referenceRGB: RGB;
-  delta: number;
-  interval: [number, number];
-  method: "nearest" | "interpolated";
-  warnings: string[];
-  ranked: { ph: number; distance: number }[];
-};
-export function matchPH(
-  rgb: RGB,
-  profile: Profile,
-  interpolate = false,
-  gains?: Vec3,
-): Match {
-  const p = validateProfile(profile),
-    sample = lab(rgb);
-  const refs = p.patches.map((q) => {
-    const raw = parseHex(q.hex),
-      color = gains && p.basis === "same-image" ? correct(raw, gains) : raw;
-    return { ...q, rgb: color, lab: lab(color), d: deltaE(sample, lab(color)) };
-  });
-  const ranked = refs
-      .map((v, i) => ({ ...v, index: i }))
-      .sort((a, b) => a.d - b.d),
-    best = ranked[0],
-    next = ranked[1];
-  const warnings: string[] = [];
-  const interval: [number, number] = [
-    refs[Math.max(0, best.index - 1)].ph,
-    refs[Math.min(refs.length - 1, best.index + 1)].ph,
-  ];
-  let estimate: number | null = best.ph,
-    method: Match["method"] = "nearest";
-  if (p.synthetic)
-    warnings.push(
-      "Synthetic demo data, for testing algorithms and the workflow only.",
-    );
-  if (best.d > 20) {
-    estimate = null;
-    warnings.push(
-      "The sample differs too much from the chart for a reliable pH estimate. It may be out of range or captured under mismatched conditions.",
-    );
-  }
-  if (next.d - best.d < 1 && best.d > 0.5)
-    warnings.push(
-      "Two reference colors match closely. Repeat the measurement or add reference points to resolve ambiguity.",
-    );
-  if (best.index === 0 || best.index === refs.length - 1)
-    warnings.push(
-      "The closest match is at the chart boundary. An out-of-range sample cannot be ruled out; no extrapolation is performed.",
-    );
-  if (
-    interpolate &&
-    estimate !== null &&
-    best.d > 0.05 &&
-    Math.abs(best.index - next.index) === 1 &&
-    next.ph !== best.ph &&
-    best.d < 12
-  ) {
-    const left = refs[Math.min(best.index, next.index)],
-      right = refs[Math.max(best.index, next.index)];
-    let residual = Infinity,
-      fraction = 0;
-    for (let n = 0; n <= 100; n++) {
-      const t = n / 100,
-        point = left.lab.map((v, c) => v + t * (right.lab[c] - v)) as Vec3,
-        d = deltaE(sample, point);
-      if (d < residual) {
-        residual = d;
-        fraction = t;
-      }
+
+export function validateProfile(value: unknown): string[] {
+  const errors: string[] = [];
+  if (!value || typeof value !== "object")
+    return ["A profile must be a JSON object."];
+  const p = value as Partial<ReferenceProfile>;
+  if (typeof p.id !== "string" || !p.id.trim() || p.id.length > 120)
+    errors.push("A profile needs an ID of 1–120 characters.");
+  if (typeof p.name !== "string" || !p.name.trim() || p.name.length > 120)
+    errors.push("A profile needs a name of 1–120 characters.");
+  if (typeof p.synthetic !== "boolean")
+    errors.push("A profile must declare whether it is synthetic.");
+  if (!Array.isArray(p.points) || p.points.length < 2 || p.points.length > 100)
+    return [...errors, "Provide 2–100 reference points."];
+  const seen = new Set<number>();
+  Array.from(p.points).forEach((point, i) => {
+    if (!point || typeof point !== "object") {
+      errors.push(`Reference ${i + 1} is invalid.`);
+      return;
     }
     if (
-      residual < 5 &&
-      fraction > 0 &&
-      fraction < 1 &&
-      right.ph - left.ph <= 2
-    ) {
-      estimate =
-        Math.round((left.ph + fraction * (right.ph - left.ph)) * 10) / 10;
-      method = "interpolated";
-      interval[0] = left.ph;
-      interval[1] = right.ph;
-      warnings.push(
-        "Interpolation between adjacent patches is a model assumption, not validated ±0.1 pH accuracy.",
-      );
-    } else
-      warnings.push(
-        "Local interpolation criteria were not met. Returning the nearest reference category.",
-      );
-  } else if (interpolate && best.d > 0.05)
-    warnings.push(
-      "Local interpolation criteria were not met. Returning the nearest reference category.",
-    );
+      typeof point.ph !== "number" ||
+      !Number.isFinite(point.ph) ||
+      point.ph < 0 ||
+      point.ph > 14
+    )
+      errors.push(`Reference ${i + 1}: pH must be a number between 0 and 14.`);
+    else if (seen.has(point.ph))
+      errors.push(`pH ${point.ph} appears more than once.`);
+    seen.add(point.ph);
+    if (typeof point.hex !== "string" || !hexToRgb(point.hex))
+      errors.push(`Reference ${i + 1}: enter a valid HEX color.`);
+  });
+  return errors;
+}
+
+export function parseProfile(json: string): ReferenceProfile {
+  let value: unknown;
+  try {
+    value = JSON.parse(json);
+  } catch {
+    throw new Error("This file is not valid JSON.");
+  }
+  const errors = validateProfile(value);
+  if (errors.length) throw new Error(errors.join(" "));
+  const profile = value as ReferenceProfile;
   return {
-    estimate,
-    nearest: { ph: best.ph, hex: best.hex },
-    referenceRGB: best.rgb,
-    delta: best.d,
-    interval,
-    method,
-    warnings,
-    ranked: ranked.map((v) => ({ ph: v.ph, distance: v.d })),
+    id: profile.id.trim(),
+    name: profile.name.trim(),
+    synthetic: profile.synthetic,
+    points: profile.points
+      .map((p) => ({ ph: p.ph, hex: rgbToHex(hexToRgb(p.hex)!) }))
+      .sort((a, b) => a.ph - b.ph),
   };
 }
-export function validationMetrics(
-  pairs: { estimate: number; reference: number }[],
-) {
-  if (!pairs.length) return null;
-  const errors = pairs.map((p) => p.estimate - p.reference);
+
+/** Uniform Catmull-Rom in D65 Lab; repeat end controls at profile boundaries. */
+export function catmullRomLab(p0: Lab, p1: Lab, p2: Lab, p3: Lab, t: number): Lab {
+  const interpolate = (a: number, b: number, c: number, d: number) =>
+    0.5 * (2 * b + (-a + c) * t +
+      (2 * a - 5 * b + 4 * c - d) * t * t +
+      (-a + 3 * b - 3 * c + d) * t * t * t);
   return {
-    n: errors.length,
-    mae: errors.reduce((s, e) => s + Math.abs(e), 0) / errors.length,
-    bias: errors.reduce((s, e) => s + e, 0) / errors.length,
-    rmse: Math.sqrt(errors.reduce((s, e) => s + e ** 2, 0) / errors.length),
+    l: interpolate(p0.l, p1.l, p2.l, p3.l),
+    a: interpolate(p0.a, p1.a, p2.a, p3.a),
+    b: interpolate(p0.b, p1.b, p2.b, p3.b),
+  };
+}
+
+const distance2 = (a: Lab, b: Lab) =>
+  (a.l - b.l) ** 2 + (a.a - b.a) ** 2 + (a.b - b.b) ** 2;
+
+/** Search the Lab spline at 0.01 pH spacing, including every reference knot. */
+export function estimatePh(rgb: RGB, profile: ReferenceProfile): PhResult {
+  const errors = validateProfile(profile);
+  if (errors.length) throw new Error(errors.join(" "));
+  const sample = rgbToLab(rgb);
+  const points = [...profile.points].sort((a, b) => a.ph - b.ph)
+    .map(point => ({ ...point, lab: rgbToLab(hexToRgb(point.hex)!) }));
+  let nearest = points[0];
+  let nearestDistance = Infinity;
+  for (const point of points) {
+    const distance = distance2(sample, point.lab);
+    if (distance < nearestDistance) {
+      nearest = point;
+      nearestDistance = distance;
+    }
+  }
+  let bestDistance = Infinity;
+  let estimate = points[0].ph;
+  let range: [number, number] = [points[0].ph, points[1].ph];
+  for (let i = 0; i < points.length - 1; i++) {
+    const left = points[i], right = points[i + 1];
+    const consider = (ph: number) => {
+      const lab = catmullRomLab(
+        points[Math.max(0, i - 1)].lab, left.lab, right.lab,
+        points[Math.min(points.length - 1, i + 2)].lab,
+        (ph - left.ph) / (right.ph - left.ph),
+      );
+      const distance = distance2(sample, lab);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        estimate = ph;
+        range = [left.ph, right.ph];
+      }
+    };
+    consider(left.ph);
+    for (let tick = Math.floor(left.ph * 100) + 1; tick < right.ph * 100; tick++)
+      consider(tick / 100);
+    consider(right.ph);
+  }
+  const interpolated = !points.some(point => Math.abs(point.ph - estimate) < 1e-9);
+  const warnings = [
+    "Catmull-Rom Lab nearest-point estimate at 0.01 pH spacing. Decimal places do not imply validated pH precision.",
+  ];
+  if (profile.synthetic)
+    warnings.unshift("Synthetic demonstration only. These colors are not a validated pH strip calibration.");
+  if (estimate === points[0].ph || estimate === points.at(-1)!.ph)
+    warnings.push("The closest match is a range endpoint. No extrapolation beyond the reference range is performed.");
+  if (Math.sqrt(bestDistance) > 15)
+    warnings.push("The sample is far from the reference curve. Check that the selected reference profile is compatible.");
+  if (points.some((point, i) => points.some((other, j) => j > i && distance2(point.lab, other.lab) < 1e-12)))
+    warnings.push("Repeated reference colors cannot uniquely distinguish pH; equal-distance ties use the first point in ascending pH order.");
+  return {
+    estimate: Number(estimate.toFixed(2)), range,
+    nearest: { ph: nearest.ph, hex: nearest.hex },
+    deltaE: Math.sqrt(nearestDistance), interpolated, warnings,
+    status: interpolated ? "interpolated" : "matched",
+  };
+}
+
+export function comparisonMetrics(rows: ComparisonRow[]): {
+  mae: number;
+  rmse: number;
+} {
+  if (!rows.length) return { mae: 0, rmse: 0 };
+  if (
+    rows.some(
+      (r) =>
+        !Number.isFinite(r.estimate) ||
+        !Number.isFinite(r.reference) ||
+        r.reference < 0 ||
+        r.reference > 14 ||
+        r.estimate < 0 ||
+        r.estimate > 14,
+    )
+  )
+    throw new Error(
+      "Comparison readings must be finite pH values between 0 and 14.",
+    );
+  const errors = rows.map((r) => r.estimate - r.reference);
+  return {
+    mae: errors.reduce((sum, e) => sum + Math.abs(e), 0) / rows.length,
+    rmse: Math.sqrt(errors.reduce((sum, e) => sum + e * e, 0) / rows.length),
   };
 }

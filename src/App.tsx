@@ -1,1756 +1,1483 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Aperture,
-  House,
-  FlaskConical,
-  Palette,
-  Sun,
-  BookOpen,
-  Info,
-  ArrowUpRight,
+  ArrowDownToLine,
   ArrowRight,
-  ShieldCheck,
-  WifiOff,
   Check,
+  ChevronRight,
   Copy,
-  Download,
+  FlaskConical,
+  Focus,
+  Github,
+  Info,
+  Layers3,
+  LockKeyhole,
+  Palette,
   Plus,
-  SlidersHorizontal,
+  ScanLine,
+  ShieldCheck,
+  Sparkles,
   Trash2,
-  CheckCircle2,
-  TriangleAlert,
+  WifiOff,
   X,
-  RotateCcw,
-  Upload,
 } from "lucide-react";
-import { Home, type Page } from "./components/Home";
-import { ImageWorkspace } from "./components/ImageWorkspace";
-import { ProfileEditor } from "./components/ProfileEditor";
-import { hex, lab, cylindrical } from "./lib/color";
+import { ImageWorkspace, type LoadedImage } from "./components/ImageWorkspace";
 import {
-  type Photo,
-  type Rect,
-  readPhoto,
-  statistics,
-  quality,
-  calibrate,
-  corrected,
-  palette,
-} from "./lib/image";
+  hexToRgb,
+  rgbToHex,
+  rgbToHsl,
+  rgbToHsv,
+  rgbToLab,
+  type RGB,
+} from "./lib/color";
+import { generatePalette, type Rect, type Sample } from "./lib/sampling";
 import {
-  type Profile,
-  demoProfile,
+  comparisonMetrics,
+  DEMO_PROFILE,
+  estimatePh,
+  parseProfile,
   validateProfile,
-  matchPH,
-  validationMetrics,
+  type ReferenceProfile,
 } from "./lib/ph";
-import { demoPhoto } from "./lib/demo";
-import {
-  type Measurement,
-  measurement,
-  download,
-  csv,
-  loadLocal,
-} from "./lib/data";
-const nav = [
-  { id: "home", label: "Explore", en: "Overview", icon: House },
-  { id: "ph", label: "pH Sense", en: "Strip analysis", icon: FlaskConical },
-  { id: "color", label: "Color Sense", en: "Color & palettes", icon: Palette },
-  { id: "light", label: "Light Sense", en: "Exposure & correction", icon: Sun },
-  { id: "history", label: "Notebook", en: "Measurements", icon: BookOpen },
-];
-function readProfiles(): Profile[] {
-  const stored = loadLocal<unknown>("ps.profiles", []);
-  if (!Array.isArray(stored)) return [];
-  return stored.flatMap((p) => {
-    try {
-      return [validateProfile(p)];
-    } catch {
-      return [];
-    }
-  });
+import { toCsv } from "./lib/export";
+
+type Route = "home" | "ph" | "color" | "about";
+type Measurement = {
+  id: string;
+  time: string;
+  estimate: number;
+  reference: number;
+  error: number;
+  absoluteError: number;
+  synthetic: boolean;
+  profile: string;
+  hex: string;
+};
+const PROFILE_KEY = "pocketsense.profiles.v1";
+const routes: Route[] = ["home", "ph", "color", "about"];
+const routeFromHash = (): Route => {
+  const value = location.hash.slice(1) as Route;
+  return routes.includes(value) ? value : "home";
+};
+function readProfiles(): ReferenceProfile[] {
+  try {
+    const data: unknown = JSON.parse(localStorage.getItem(PROFILE_KEY) || "[]");
+    return Array.isArray(data)
+      ? data
+          .flatMap((p) => {
+            try {
+              return [parseProfile(JSON.stringify(p))];
+            } catch {
+              return [];
+            }
+          })
+          .filter((p) => p.id !== DEMO_PROFILE.id)
+      : [];
+  } catch {
+    return [];
+  }
 }
-function Stat({
-  label,
-  value,
-  suffix,
-}: {
-  label: string;
-  value: string;
-  suffix?: string;
-}) {
+function download(name: string, content: string, type = "application/json") {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const formatRgb = (rgb: RGB) =>
+  `${Math.round(rgb.r)}, ${Math.round(rgb.g)}, ${Math.round(rgb.b)}`;
+const num = (value: number) => value.toFixed(1);
+
+function Brand({ small = false }: { small?: boolean }) {
   return (
-    <div className="stat">
-      <span>{label}</span>
-      <strong>
-        {value}
-        <small>{suffix}</small>
-      </strong>
-    </div>
+    <a
+      className={`brand ${small ? "small" : ""}`}
+      href="#home"
+      aria-label="PocketSense home"
+    >
+      <span className="brand-mark">
+        <Focus size={22} strokeWidth={2.2} />
+      </span>
+      <span>
+        Pocket<span className="brand-sense">Sense</span>
+        <span className="brand-dot">.</span>
+      </span>
+    </a>
   );
 }
-function Notes({ notes }: { notes: string[] }) {
+
+function Home() {
   return (
-    <div className="qc-list">
-      {notes.length ? (
-        notes.map((n, i) => (
-          <p key={i}>
-            <TriangleAlert size={15} />
-            {n}
+    <>
+      <section className="hero section-enter">
+        <div className="hero-copy">
+          <div className="eyebrow">
+            <span className="live-dot" /> A LITTLE CAMERA. A WORLD OF DISCOVERY.
+          </div>
+          <h1>
+            See color.
+            <br />
+            Discover <span>more.</span>
+          </h1>
+          <p className="hero-description">
+            Turn your camera into a color sensor.
+            <br className="desktop-break" /> Explore palettes, make sense of pH,
+            and bring
+            <br className="desktop-break" /> a little science to the everyday.
           </p>
-        ))
-      ) : (
-        <p className="ok">
-          <CheckCircle2 size={16} />
-          No exposure or uniformity thresholds triggered. Reference calibration
-          and validation are still required.
-        </p>
-      )}
-    </div>
+          <div className="hero-actions">
+            <a className="button primary large" href="#ph">
+              Start sensing <ArrowRight size={18} />
+            </a>
+            <a className="button text-button" href="#color">
+              Explore Color Sense <ChevronRight size={16} />
+            </a>
+          </div>
+          <div className="hero-assurance">
+            <span>
+              <LockKeyhole size={14} /> Private by design
+            </span>
+            <span>
+              <WifiOff size={14} /> Ready for offline
+            </span>
+            <span>No extra hardware</span>
+          </div>
+        </div>
+        <div
+          className="hero-instrument"
+          aria-label="Illustration of a color sensor and synthetic pH reading"
+        >
+          <div className="instrument-grid" />
+          <div className="orbit orbit-one" />
+          <div className="orbit orbit-two" />
+          <div className="color-wheel">
+            <div className="wheel-center">
+              <span className="crosshair" />
+              <span className="lens-dot" />
+              <span className="wheel-caption">A NEW WAY TO SEE</span>
+            </div>
+          </div>
+          <div className="floating-swatch">
+            <span className="swatch-square" />
+            <span>
+              <small>COLOR DETECTED</small>
+              <strong>#70B3A4</strong>
+              <em>112 · 179 · 164</em>
+            </span>
+            <span className="tiny-check">
+              <Check size={13} />
+            </span>
+          </div>
+          <div className="floating-ph">
+            <div>
+              <span className="mini-dot" /> pH SENSE{" "}
+              <span className="demo-tag">DEMO</span>
+            </div>
+            <strong>
+              7<span>.0</span>
+              <small>pH</small>
+            </strong>
+            <div className="ph-mini-scale">
+              {[
+                "#e38d6c",
+                "#e8b85a",
+                "#d8cd6c",
+                "#95b975",
+                "#64a8a0",
+                "#698fae",
+                "#987db1",
+              ].map((c) => (
+                <i key={c} style={{ background: c }} />
+              ))}
+            </div>
+            <p>Synthetic reference match</p>
+          </div>
+          <div className="instrument-label">
+            <span>CAMERA → COLOR → DISCOVERY</span>
+            <span>01 / 02</span>
+          </div>
+        </div>
+      </section>
+      <section className="tools-section section-enter delay-1">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">YOUR POCKET LAB</span>
+            <h2>Two ways to get curious.</h2>
+          </div>
+          <p>One camera. A fresh perspective.</p>
+        </div>
+        <div className="tool-grid">
+          <a className="tool-card ph-card" href="#ph">
+            <div className="tool-card-copy">
+              <span className="tool-icon">
+                <FlaskConical size={22} />
+              </span>
+              <h3>
+                pH Sense <ArrowRight size={23} />
+              </h3>
+              <p>
+                From test strip to insight. Compare a sampled color with your
+                own reference chart.
+              </p>
+              <span className="pill">REFERENCE-GUIDED ANALYSIS</span>
+            </div>
+            <div className="strip-illustration">
+              <span className="paper-strip">
+                <i />
+              </span>
+              <div className="strip-reference">
+                {["#e49b68", "#ddc967", "#95b975", "#5eaaa1", "#7e91af"].map(
+                  (c, i) => (
+                    <span key={c}>
+                      <i style={{ background: c }} />
+                      <small>{i * 2 + 3}</small>
+                    </span>
+                  ),
+                )}
+              </div>
+              <span className="selection-corner tl" />
+              <span className="selection-corner br" />
+            </div>
+          </a>
+          <a className="tool-card color-card" href="#color">
+            <div className="tool-card-copy">
+              <span className="tool-icon">
+                <Palette size={22} />
+              </span>
+              <h3>
+                Color Sense <ArrowRight size={23} />
+              </h3>
+              <p>
+                Capture a color. Find a palette. Take inspiration from anything
+                in your frame.
+              </p>
+              <span className="pill">PIXELS WITH POSSIBILITIES</span>
+            </div>
+            <div className="palette-illustration">
+              {["#275d54", "#68a490", "#e4ddac", "#eaa482", "#b66350"].map(
+                (c, i) => (
+                  <span
+                    key={c}
+                    style={{
+                      background: c,
+                      transform: `rotate(${(i - 2) * 9}deg) translateY(${Math.abs(i - 2) * 4}px)`,
+                    }}
+                  >
+                    <i>{c}</i>
+                  </span>
+                ),
+              )}
+            </div>
+          </a>
+        </div>
+      </section>
+      <section className="privacy-ribbon section-enter delay-2">
+        <span className="privacy-icon">
+          <ShieldCheck size={24} />
+        </span>
+        <div>
+          <h3>Your photos stay with you.</h3>
+          <p>
+            All image processing happens in your browser. No uploads. No
+            accounts. Just discovery.
+          </p>
+        </div>
+        <a href="#about">
+          Meet PocketSense <ArrowRight size={17} />
+        </a>
+      </section>
+    </>
   );
 }
-export default function App() {
-  const [page, setPage] = useState<Page>("home"),
-    [photo, setPhoto] = useState<Photo | null>(null),
-    [roi, setRoi] = useState<Rect | null>(null),
-    [refRegion, setRefRegion] = useState<Rect | null>(null),
-    [target, setTarget] = useState<"sample" | "reference">("sample");
-  const [correction, setCorrection] = useState(false),
-    [profiles, setProfiles] = useState<Profile[]>(readProfiles),
-    [selectedId, setSelectedId] = useState(""),
-    [editor, setEditor] = useState(false),
-    [editing, setEditing] = useState<Profile | null>(null),
-    [interpolate, setInterpolate] = useState(false);
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
-    [paletteCount, setPaletteCount] = useState(5),
-    [referencePH, setReferencePH] = useState(""),
-    [sampleName, setSampleName] = useState("");
-  const [persist, setPersist] = useState(
-      () => loadLocal<boolean>("ps.persist", false) === true,
-    ),
-    [history, setHistory] = useState<Measurement[]>(() => {
-      const h = loadLocal<Measurement[]>("ps.history", []);
-      return Array.isArray(h)
-        ? h.filter(
-            (r) =>
-              r.schema === "pocketsense.measurement.v1" &&
-              Array.isArray(r.rgb) &&
-              typeof r.id === "string",
-          )
-        : [];
-    });
-  const [online, setOnline] = useState(navigator.onLine),
-    [offlineReady, setOfflineReady] = useState(false),
-    [cacheError, setCacheError] = useState(false),
-    [install, setInstall] = useState<
-      (Event & { prompt: () => Promise<void> }) | null
-    >(null),
-    [clearConfirm, setClearConfirm] = useState(false);
-  const fileToken = useRef(0);
-  useEffect(() => {
-    const o = () => setOnline(navigator.onLine),
-      ready = () => setOfflineReady(true),
-      failed = () => setCacheError(true),
-      installHandler = (e: Event) => {
-        e.preventDefault();
-        setInstall(e as Event & { prompt: () => Promise<void> });
-      };
-    window.addEventListener("online", o);
-    window.addEventListener("offline", o);
-    window.addEventListener("pocketsense-ready", ready);
-    window.addEventListener("pocketsense-cache-error", failed);
-    window.addEventListener("beforeinstallprompt", installHandler);
-    return () => {
-      window.removeEventListener("online", o);
-      window.removeEventListener("offline", o);
-      window.removeEventListener("pocketsense-ready", ready);
-      window.removeEventListener("pocketsense-cache-error", failed);
-      window.removeEventListener("beforeinstallprompt", installHandler);
-    };
-  }, []);
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(""), 3500);
-    return () => clearTimeout(t);
-  }, [notice]);
-  function go(p: Page) {
-    setPage(p);
-    setTarget("sample");
-    setError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-  function resetImage(p: Photo | null) {
-    setPhoto(p);
-    setRoi(
-      p
-        ? {
-            x: Math.floor(p.pixels.width * 0.4),
-            y: Math.floor(p.pixels.height * 0.4),
-            w: Math.max(1, Math.floor(p.pixels.width * 0.2)),
-            h: Math.max(1, Math.floor(p.pixels.height * 0.2)),
-          }
-        : null,
-    );
-    setRefRegion(null);
-    setCorrection(false);
-    setTarget("sample");
-    setReferencePH("");
-    setSampleName("");
-    setError("");
-    setSelectedId("");
-    setInterpolate(false);
-  }
-  async function upload(file: File) {
-    const token = ++fileToken.current;
-    setBusy(true);
-    setError("");
+
+function About() {
+  return (
+    <section className="about-page section-enter">
+      <div className="eyebrow">BUILT FOR CURIOSITY. GROUNDED IN SCIENCE.</div>
+      <h1>
+        A little lab.
+        <br />
+        <span>A lot of possibility.</span>
+      </h1>
+      <p className="intro">
+        PocketSense makes the colors in a photograph useful. Explore an image,
+        build a palette, or compare a test strip against a compatible pH
+        reference.
+      </p>
+      <div className="about-grid">
+        <article className="panel">
+          <ShieldCheck />
+          <h2>Private by design</h2>
+          <p>
+            Photos are decoded and analyzed on your device. They are not sent to
+            a server or saved persistently by this app. Custom reference
+            profiles are saved in this browser. Measurement logs stay in memory
+            until you leave or reload.
+          </p>
+          <p>
+            Exported files are saved only when you choose. There are no
+            accounts, analytics, runtime CDNs, or cloud image services.
+          </p>
+        </article>
+        <article className="panel">
+          <WifiOff />
+          <h2>Take it offline</h2>
+          <p>
+            Open the production app online once and wait for “Offline ready” in
+            the header. You can then reopen it and analyze new photos without a
+            connection.
+          </p>
+          <p>
+            Use your browser’s install or Add to Home Screen action where
+            supported. Clearing site data removes cached files and saved
+            profiles. Offline availability depends on browser storage retention.
+          </p>
+        </article>
+      </div>
+      <article className="panel science-note">
+        <span className="eyebrow">WHAT THE NUMBERS MEAN</span>
+        <h2>A measured pixel is a starting point.</h2>
+        <p>
+          Image RGB depends on lighting, camera processing, exposure, and white
+          balance. It is not a direct measurement of an object’s physical
+          reflectance.
+        </p>
+        <p>
+          pH Sense compares median region color in D65 CIE Lab using CIEDE2000
+          color difference. Use a reference profile for the same strip
+          chemistry, with a similar camera and lighting. Sampling the chart and
+          strip from the same photo can reduce some differences, but does not
+          establish accuracy.
+        </p>
+        <p>
+          Local interpolation is allowed only when neighboring references
+          support it. The displayed bracket comes from the available reference
+          values; it is not a statistical confidence interval. Decimal digits
+          describe calculation, not validated precision. Ambiguous or distant
+          colors can produce no estimate.
+        </p>
+        <p>
+          The bundled profile and scenes are synthetic demonstrations, never
+          experimental validation. PocketSense is an exploratory educational
+          tool, not a clinical diagnostic device.
+        </p>
+        <a
+          href="https://hajim.rochester.edu/ece/sites/gsharma/ciede2000/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          CIEDE2000 implementation reference <ArrowRight size={15} />
+        </a>
+      </article>
+    </section>
+  );
+}
+
+function ColorResults({
+  image,
+  sample,
+  notify,
+}: {
+  image: LoadedImage | null;
+  sample: Sample | null;
+  notify: (text: string) => void;
+}) {
+  const [stat, setStat] = useState<"median" | "mean">("median");
+  const [count, setCount] = useState(6);
+  const [generated, setGenerated] = useState(false);
+  const colors = useMemo(
+    () => (image && generated ? generatePalette(image.data, count) : []),
+    [image, count, generated],
+  );
+  const rgb = sample?.[stat];
+  const lab = rgb ? rgbToLab(rgb) : null;
+  const hsv = rgb ? rgbToHsv(rgb) : null;
+  const hsl = rgb ? rgbToHsl(rgb) : null;
+  async function copy(value: string) {
     try {
-      const p = await readPhoto(file);
-      if (fileToken.current === token) resetImage(p);
-    } catch (e) {
-      if (fileToken.current === token) setError((e as Error).message);
-    } finally {
-      if (fileToken.current === token) setBusy(false);
-    }
-  }
-  function demo(kind: "ph" | "color") {
-    fileToken.current++;
-    setBusy(false);
-    resetImage(demoPhoto(kind));
-    setPage(kind);
-    if (kind === "ph") {
-      setRoi({ x: 440, y: 365, w: 120, h: 115 });
-      setSelectedId("demo-v1");
-    } else setRoi({ x: 620, y: 220, w: 75, h: 75 });
-  }
-  const rawStats = useMemo(
-    () => (photo && roi ? statistics(photo.pixels, roi) : null),
-    [photo, roi],
-  );
-  const refStats = useMemo(
-    () => (photo && refRegion ? statistics(photo.pixels, refRegion) : null),
-    [photo, refRegion],
-  );
-  const calibration = useMemo(
-    () => (refStats ? calibrate(refStats) : null),
-    [refStats],
-  );
-  const gains = correction ? (calibration?.gains ?? null) : null;
-  const pixels = useMemo(
-    () =>
-      photo ? (gains ? corrected(photo.pixels, gains) : photo.pixels) : null,
-    [photo, gains],
-  );
-  const stats = useMemo(
-    () => (pixels && roi ? statistics(pixels, roi) : null),
-    [pixels, roi],
-  );
-  const wholeStats = useMemo(
-    () => (photo ? statistics(photo.pixels) : null),
-    [photo],
-  );
-  const paletteColors = useMemo(
-    () => (pixels ? palette(pixels, paletteCount) : []),
-    [pixels, paletteCount],
-  );
-  const profile =
-    selectedId === "demo-v1"
-      ? demoProfile
-      : (profiles.find((p) => p.id === selectedId) ?? null);
-  const result = useMemo(
-    () =>
-      stats && profile
-        ? matchPH(stats.robust, profile, interpolate, gains ?? undefined)
-        : null,
-    [stats, profile, interpolate, gains],
-  );
-  const qc = useMemo(
-    () =>
-      stats
-        ? [
-            ...quality(stats, true),
-            ...(rawStats && gains
-              ? quality(rawStats, true).filter(
-                  (x) => !quality(stats, true).includes(x),
-                )
-              : []),
-          ]
-        : [],
-    [stats, rawStats, gains],
-  );
-  const labValue = stats ? lab(stats.robust) : null,
-    cyl = stats ? cylindrical(stats.robust) : null;
-  const validMeter =
-    referencePH.trim() !== "" &&
-    Number.isFinite(+referencePH) &&
-    +referencePH >= 0 &&
-    +referencePH <= 14;
-  const validPairs = history
-    .filter(
-      (r) =>
-        r.imageKind === "photo" &&
-        !r.profile?.synthetic &&
-        r.estimate !== null &&
-        r.referencePH !== null &&
-        Number.isFinite(r.estimate) &&
-        Number.isFinite(r.referencePH),
-    )
-    .map((r) => ({ estimate: r.estimate!, reference: r.referencePH! }));
-  const metrics = validationMetrics(validPairs);
-  async function copy(s: string) {
-    try {
-      await navigator.clipboard.writeText(s);
-      setNotice("Copied " + s);
+      await navigator.clipboard.writeText(value);
+      notify(`Copied ${value}`);
     } catch {
-      setNotice(
-        "Clipboard access is unavailable. Select and copy the text manually.",
+      notify(
+        "Clipboard unavailable. Select the displayed color value to copy.",
       );
     }
   }
-  function saveProfile(p: Profile) {
-    const next = [...profiles.filter((x) => x.id !== p.id), p];
-    try {
-      localStorage.setItem("ps.profiles", JSON.stringify(next));
-      setProfiles(next);
-      setSelectedId(p.id);
-      setEditor(false);
-      setNotice("Reference profile saved on this device");
-    } catch {
+  return (
+    <div className="results-stack">
+      <section className="panel result-panel">
+        <div className="panel-heading">
+          <h2>
+            <Focus size={18} /> Color reading
+          </h2>
+          <span className="status-badge">
+            {sample
+              ? `${sample.pixelCount.toLocaleString()} px`
+              : "AWAITING IMAGE"}
+          </span>
+        </div>
+        {rgb && lab && hsv && hsl ? (
+          <>
+            <div className="color-reading">
+              <div
+                className="large-swatch"
+                style={{ background: rgbToHex(rgb) }}
+              />
+              <div>
+                <span className="eyebrow">
+                  {sample?.pixelCount === 1
+                    ? "PIXEL COLOR"
+                    : `${stat.toUpperCase()} REGION COLOR`}
+                </span>
+                <h3 data-testid="color-hex">{rgbToHex(rgb)}</h3>
+                <button
+                  className="inline-button"
+                  onClick={() => copy(rgbToHex(rgb))}
+                >
+                  <Copy size={13} /> Copy HEX
+                </button>
+              </div>
+            </div>
+            <div className="segmented">
+              <button
+                className={stat === "median" ? "active" : ""}
+                onClick={() => setStat("median")}
+              >
+                Median
+              </button>
+              <button
+                className={stat === "mean" ? "active" : ""}
+                onClick={() => setStat("mean")}
+              >
+                Mean
+              </button>
+            </div>
+            <dl className="color-values">
+              <div>
+                <dt>RGB</dt>
+                <dd>{formatRgb(rgb)}</dd>
+              </div>
+              <div>
+                <dt>HSL</dt>
+                <dd>
+                  {num(hsl.h)}° · {num(hsl.s)}% · {num(hsl.l)}%
+                </dd>
+              </div>
+              <div>
+                <dt>HSV</dt>
+                <dd>
+                  {num(hsv.h)}° · {num(hsv.s)}% · {num(hsv.v)}%
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  CIE Lab <small>D65</small>
+                </dt>
+                <dd>
+                  {num(lab.l)} · {num(lab.a)} · {num(lab.b)}
+                </dd>
+              </div>
+            </dl>
+            <div className="stat-pair">
+              <div>
+                <small>Mean RGB</small>
+                <strong data-testid="region-mean">
+                  {formatRgb(sample!.mean)}
+                </strong>
+              </div>
+              <div>
+                <small>Median RGB</small>
+                <strong data-testid="region-median">
+                  {formatRgb(sample!.median)}
+                </strong>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="empty-result">
+            <Focus size={36} />
+            <h3>Find your first color.</h3>
+            <p>
+              Add an image and tap a pixel or select a region. Every value comes
+              from your image.
+            </p>
+          </div>
+        )}
+        <p className="fine-print">
+          <Info size={13} /> Photographed color depends on your camera and
+          lighting.
+        </p>
+      </section>
+      <section className="panel palette-panel">
+        <div className="panel-heading">
+          <h2>
+            <Layers3 size={18} /> Your image, in color
+          </h2>
+          <span className="status-badge">PALETTE</span>
+        </div>
+        <p className="muted">
+          Representative colors, clustered from your image.
+        </p>
+        <div className="palette-controls">
+          <label>
+            Colors{" "}
+            <select
+              value={count}
+              onChange={(e) => setCount(Number(e.target.value))}
+            >
+              {[5, 6, 7, 8].map((n) => (
+                <option key={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="button primary compact"
+            disabled={!image}
+            onClick={() => setGenerated(true)}
+          >
+            <Sparkles size={15} />{" "}
+            {generated ? "Refresh palette" : "Generate palette"}
+          </button>
+        </div>
+        {colors.length ? (
+          <>
+            <div className="palette-swatches">
+              {colors.map((color, i) => (
+                <button
+                  className="palette-item"
+                  key={`${color.hex}-${i}`}
+                  onClick={() => copy(color.hex)}
+                  title={`Copy ${color.hex}, RGB ${formatRgb(color.rgb)}`}
+                >
+                  <span style={{ background: color.hex }} />
+                  <strong>{color.hex}</strong>
+                  <small>{formatRgb(color.rgb)}</small>
+                  <Copy size={12} />
+                </button>
+              ))}
+            </div>
+            <div className="export-actions">
+              <button
+                className="button subtle compact"
+                onClick={() =>
+                  download(
+                    "pocketsense-palette.json",
+                    JSON.stringify({ source: image?.name, colors }, null, 2),
+                  )
+                }
+              >
+                <ArrowDownToLine size={14} /> JSON
+              </button>
+              <button
+                className="button subtle compact"
+                onClick={() =>
+                  download(
+                    "pocketsense-palette.csv",
+                    toCsv(
+                      colors.map((c) => ({
+                        hex: c.hex,
+                        r: c.rgb.r,
+                        g: c.rgb.g,
+                        b: c.rgb.b,
+                        population: c.population,
+                      })),
+                    ),
+                    "text/csv",
+                  )
+                }
+              >
+                <ArrowDownToLine size={14} /> CSV
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="palette-placeholder">
+            {["#dce5df", "#dde5dc", "#e6e9d8", "#ede6da", "#e9ddd4", "#e1d8d4"]
+              .slice(0, count)
+              .map((c, i) => (
+                <i key={i} style={{ background: c }} />
+              ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ProfileEditor({
+  sample,
+  syntheticSource,
+  onSave,
+  onCancel,
+}: {
+  sample: Sample | null;
+  syntheticSource: boolean;
+  onSave: (p: ReferenceProfile) => void;
+  onCancel: () => void;
+}) {
+  const [fromSynthetic, setFromSynthetic] = useState(false);
+  const [pendingSynthetic, setPendingSynthetic] = useState(false);
+  const [name, setName] = useState("");
+  const [ph, setPh] = useState("7");
+  const [hex, setHex] = useState("#95B975");
+  const [points, setPoints] = useState<ReferenceProfile["points"]>([]);
+  const [error, setError] = useState("");
+  const referenceSynthetic = useRef(false);
+  function add() {
+    const value = Number(ph);
+    if (
+      ph.trim() === "" ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > 14 ||
+      !hexToRgb(hex)
+    ) {
+      setError("Enter a pH from 0 to 14 and a valid six-digit HEX color.");
+      return;
+    }
+    if (points.some((p) => p.ph === value)) {
       setError(
-        "Local storage is unavailable. Export the profile as JSON to keep a copy.",
+        "Each pH value must be unique. Remove the existing value to replace it.",
+      );
+      return;
+    }
+    setPoints(
+      [...points, { ph: value, hex: rgbToHex(hexToRgb(hex)!) }].sort(
+        (a, b) => a.ph - b.ph,
+      ),
+    );
+    setFromSynthetic(fromSynthetic || pendingSynthetic);
+    setError("");
+  }
+  function save() {
+    const profile: ReferenceProfile = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      synthetic: fromSynthetic,
+      points,
+    };
+    const errors = validateProfile(profile);
+    if (errors.length) {
+      setError(errors.join(" "));
+      return;
+    }
+    onSave(profile);
+  }
+  return (
+    <section className="profile-editor">
+      <div className="panel-heading">
+        <h3>Create reference profile</h3>
+        <button
+          className="icon-button"
+          aria-label="Close profile editor"
+          onClick={onCancel}
+        >
+          <X size={17} />
+        </button>
+      </div>
+      <p className="muted">
+        Upload your reference chart below. Click or select each color patch,
+        enter its printed pH value, then add the reference. Save at least two
+        references to reuse this chart. pH labels are entered manually.
+      </p>
+      <div className="reference-image-editor">
+        <ImageWorkspace
+          kind="ph"
+          reference
+          onImage={(next) => { referenceSynthetic.current = !!next?.synthetic; }}
+          onSelection={(next) => {
+            if (next) {
+              setHex(rgbToHex(next.median));
+              setPendingSynthetic(referenceSynthetic.current);
+            }
+          }}
+        />
+      </div>
+      <label className="field">
+        Profile name
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. My strip chart · daylight"
+          maxLength={80}
+        />
+      </label>
+      <div className="reference-fields">
+        <label className="field">
+          pH value
+          <input
+            type="number"
+            min="0"
+            max="14"
+            step="0.01"
+            value={ph}
+            onChange={(e) => setPh(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          Reference HEX
+          <input
+            value={hex}
+            onChange={(e) => {
+              setHex(e.target.value);
+              setPendingSynthetic(false);
+            }}
+            placeholder="#95B975"
+            maxLength={7}
+          />
+        </label>
+      </div>
+      {hexToRgb(hex) && (
+        <p className="muted" data-testid="reference-rgb">
+          Reference RGB: {formatRgb(hexToRgb(hex)!)}
+        </p>
+      )}
+      <div className="button-row">
+        <button
+          className="button subtle compact"
+          disabled={!sample}
+          onClick={() => {
+            setHex(rgbToHex(sample!.median));
+            setPendingSynthetic(syntheticSource);
+          }}
+        >
+          <Focus size={14} /> Use sampled color
+        </button>
+        <button className="button secondary compact" onClick={add}>
+          <Plus size={14} /> Add reference
+        </button>
+      </div>
+      <div className="reference-list">
+        {points.map((p) => (
+          <div key={p.ph}>
+            <i style={{ background: p.hex }} />
+            <strong>pH {p.ph}</strong>
+            <span>{p.hex}</span>
+            <button
+              className="icon-button"
+              aria-label={`Remove pH ${p.ph} reference`}
+              onClick={() => setPoints(points.filter((q) => q.ph !== p.ph))}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <button className="button primary full" onClick={save}>
+        Save profile <Check size={15} />
+      </button>
+      <p className="fine-print">
+        At least 2 distinct pH values. Custom profiles are unvalidated.
+        Demo-sampled profiles remain marked synthetic.
+      </p>
+    </section>
+  );
+}
+
+function PhResults({
+  sample,
+  image,
+  rect,
+  notify,
+}: {
+  sample: Sample | null;
+  image: LoadedImage | null;
+  rect: Rect | null;
+  notify: (t: string) => void;
+}) {
+  const [saved, setSaved] = useState(readProfiles);
+  const [selected, setSelected] = useState(DEMO_PROFILE.id);
+  const [editing, setEditing] = useState(false);
+  const [meter, setMeter] = useState("");
+  const [records, setRecords] = useState<Measurement[]>([]);
+  const [confirmed, setConfirmed] = useState(false);
+  const [importError, setImportError] = useState("");
+  const importRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    setConfirmed(false);
+    setMeter("");
+  }, [sample, image, selected]);
+  const profiles = [DEMO_PROFILE, ...saved];
+  const profile = profiles.find((p) => p.id === selected) || DEMO_PROFILE;
+  const result = useMemo(
+    () => (sample ? estimatePh(sample.median, profile) : null),
+    [sample, profile],
+  );
+  const synthetic = profile.synthetic || !!image?.synthetic;
+  const realRecords = records.filter((r) => !r.synthetic);
+  const metrics = realRecords.length ? comparisonMetrics(realRecords) : null;
+  function persist(p: ReferenceProfile) {
+    const next = [...saved.filter((q) => q.id !== p.id), p];
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+      setSaved(next);
+      setSelected(p.id);
+      setEditing(false);
+      setConfirmed(false);
+      setImportError("");
+      notify("Reference profile saved in this browser.");
+    } catch {
+      notify(
+        "Browser storage is unavailable or full. Export your profile to keep it.",
       );
       download("pocketsense-profile.json", JSON.stringify(p, null, 2));
     }
   }
-  async function importProfile(file: File) {
+  async function importFile(file?: File) {
+    if (!file) return;
     try {
-      if (file.size > 100000)
-        throw new Error("The reference profile file is too large.");
-      saveProfile(validateProfile(JSON.parse(await file.text())));
-    } catch (e) {
-      setError("Import failed: " + (e as Error).message);
-    }
-  }
-  function currentRecord(): Measurement | null {
-    if (!photo || !stats || !rawStats || !roi) return null;
-    return measurement({
-      name: sampleName.trim() || photo.name,
-      demo: photo.demo,
-      rgb: stats.robust,
-      raw: rawStats.robust,
-      roi,
-      size: [photo.pixels.width, photo.pixels.height],
-      match: page === "ph" ? result : null,
-      profile: page === "ph" ? profile : null,
-      gains,
-      referenceRegion: refRegion,
-      referencePH: page === "ph" && validMeter ? +referencePH : null,
-      qc: [
-        ...qc,
-        ...(page === "ph"
-          ? (result?.warnings ?? ["No pH profile selected; color data only."])
-          : []),
-      ],
-    });
-  }
-  function exportCurrent(format: "json" | "csv") {
-    const record = currentRecord();
-    if (record)
-      download(
-        `pocketsense-${Date.now()}.${format}`,
-        format === "json" ? JSON.stringify(record, null, 2) : csv([record]),
-        format === "json" ? "application/json" : "text/csv;charset=utf-8",
+      if (file.size > 250000) throw new Error("Profile file is too large.");
+      const p = parseProfile(await file.text());
+      persist({ ...p, id: crypto.randomUUID() });
+    } catch (error) {
+      setImportError(
+        error instanceof Error ? error.message : "Invalid profile file.",
       );
-  }
-  function saveMeasurement() {
-    const record = currentRecord();
-    if (!record) return;
-    const next = [record, ...history].slice(0, 500);
-    setHistory(next);
-    if (persist) {
-      try {
-        localStorage.setItem("ps.history", JSON.stringify(next));
-      } catch {
-        setError(
-          "Local storage is full or unavailable. Records remain in this session only; please export them.",
-        );
-      }
     }
-    setNotice(
-      "Measurement added" +
-        (persist ? " and saved on this device" : " · This session only"),
+  }
+  const validMeter =
+    meter.trim() !== "" &&
+    Number.isFinite(Number(meter)) &&
+    Number(meter) >= 0 &&
+    Number(meter) <= 14;
+  const canRecord =
+    result?.estimate != null && validMeter && (synthetic || confirmed);
+  function record() {
+    if (!canRecord || result?.estimate == null) return;
+    const estimate = result.estimate;
+    const reference = Number(meter);
+    setRecords([
+      ...records,
+      {
+        id: crypto.randomUUID(),
+        time: new Date().toISOString(),
+        estimate,
+        reference,
+        error: estimate - reference,
+        absoluteError: Math.abs(estimate - reference),
+        synthetic,
+        profile: profile.name,
+        hex: rgbToHex(sample!.median),
+      },
+    ]);
+    notify("Comparison added to this session.");
+  }
+  function exportResult() {
+    if (!result || !sample) return;
+    download(
+      "pocketsense-ph-result.json",
+      JSON.stringify(
+        {
+          version: 1,
+          time: new Date().toISOString(),
+          image: {
+            name: image?.name,
+            width: image?.width,
+            height: image?.height,
+            originalWidth: image?.originalWidth,
+            originalHeight: image?.originalHeight,
+            coordinateFrame:
+              "Processed image pixels; transparent pixels composited onto white",
+          },
+          synthetic,
+          region: rect,
+          sample,
+          profile,
+          result,
+          limitations:
+            "Exploratory estimate. Reference bracket is not a confidence interval. Numerical interpolation is not validated precision.",
+        },
+        null,
+        2,
+      ),
     );
   }
-  function togglePersist(checked: boolean) {
-    setPersist(checked);
-    try {
-      localStorage.setItem("ps.persist", JSON.stringify(checked));
-      if (checked) localStorage.setItem("ps.history", JSON.stringify(history));
-      else localStorage.removeItem("ps.history");
-    } catch {
-      setPersist(false);
-      setError("Persistent storage is unavailable. Please export your data.");
-    }
-  }
-  const colorReadout = (
-    <>
-      <div
-        className="color-readout"
-        style={{ background: stats ? hex(stats.robust) : "#e3e7dc" }}
-      >
-        <span>REPRESENTATIVE COLOR</span>
-        <strong>{stats ? hex(stats.robust) : "—"}</strong>
-        {stats && (
-          <button aria-label="Copy HEX" onClick={() => copy(hex(stats.robust))}>
-            <Copy size={17} />
+  return (
+    <div className="results-stack">
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>
+            <FlaskConical size={18} /> Reference profile
+          </h2>
+          <span className="step-label">02</span>
+        </div>
+        <label className="field">
+          Choose your reference
+          <select
+            aria-label="Choose your reference"
+            value={profile.id}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              setConfirmed(false);
+            }}
+          >
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="reference-strip">
+          {profile.points.map((p) => (
+            <div key={p.ph} title={`${p.hex} · pH ${p.ph}`}>
+              <i style={{ background: p.hex }} />
+              <span>{p.ph}</span>
+            </div>
+          ))}
+        </div>
+        <div
+          className={`calibration-note ${profile.synthetic ? "demo-note" : ""}`}
+        >
+          <Info size={14} />
+          <span>
+            {profile.synthetic
+              ? "Synthetic demonstration only. Select a compatible custom profile for real strips."
+              : "Custom calibration · unvalidated. Match the strip chemistry and imaging conditions."}
+          </span>
+        </div>
+        <div className="button-row">
+          <button
+            className="button subtle compact"
+            onClick={() => setEditing(!editing)}
+          >
+            <Plus size={14} /> Create profile
           </button>
+          <button
+            className="button subtle compact"
+            onClick={() => importRef.current?.click()}
+          >
+            Import
+          </button>
+          <button
+            className="button subtle compact"
+            onClick={() =>
+              download(
+                "pocketsense-profile.json",
+                JSON.stringify(profile, null, 2),
+              )
+            }
+          >
+            Export
+          </button>
+        </div>
+        <input
+          ref={importRef}
+          aria-label="Import reference profile"
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            void importFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        {importError && (
+          <p role="alert" className="form-error">
+            {importError}
+          </p>
+        )}
+        {editing && (
+          <ProfileEditor
+            sample={sample}
+            syntheticSource={!!image?.synthetic}
+            onSave={persist}
+            onCancel={() => setEditing(false)}
+          />
+        )}
+      </section>
+      <section className="panel ph-result">
+        <div className="panel-heading">
+          <h2>pH reading</h2>
+          <span className="status-badge">
+            {synthetic ? "SYNTHETIC DEMO" : "EXPLORATORY"}
+          </span>
+        </div>
+        {result ? (
+          <>
+            <div className="ph-number">
+              <span className="eyebrow">
+                {result.estimate === null
+                  ? "NO SUPPORTED ESTIMATE"
+                  : "ESTIMATED pH"}
+              </span>
+              <strong data-testid="ph-estimate">
+                {result.estimate === null ? "—" : result.estimate.toFixed(2)}
+              </strong>
+              <p>
+                {result.range
+                  ? `Reference bracket ${num(result.range[0])} – ${num(result.range[1])}`
+                  : "Outside the supported color match"}
+              </p>
+              <small>Reference resolution, not a confidence interval</small>
+            </div>
+            <div className="ph-scale">
+              {profile.points.map((p) => (
+                <span key={p.ph} style={{ background: p.hex }} />
+              ))}
+              {result.estimate !== null && (
+                <i
+                  style={{
+                    left: `${Math.max(0, Math.min(100, ((result.estimate - profile.points[0].ph) / (profile.points.at(-1)!.ph - profile.points[0].ph)) * 100))}%`,
+                  }}
+                />
+              )}
+            </div>
+            <div className="comparison-swatches">
+              <div>
+                <i style={{ background: rgbToHex(sample!.median) }} />
+                <span>
+                  Sample median<strong>{rgbToHex(sample!.median)}</strong>
+                </span>
+              </div>
+              <div>
+                <i style={{ background: result.nearest.hex }} />
+                <span>
+                  Closest reference<strong>pH {result.nearest.ph}</strong>
+                </span>
+              </div>
+            </div>
+            <dl className="color-values">
+              <div>
+                <dt>Color difference</dt>
+                <dd>ΔEab {result.deltaE.toFixed(2)}</dd>
+              </div>
+              <div>
+                <dt>Method</dt>
+                <dd>
+                  {result.interpolated
+                    ? "Lab Catmull-Rom · 0.01 pH"
+                    : result.estimate !== null
+                      ? "Nearest reference"
+                      : "Match rejected"}
+                </dd>
+              </div>
+            </dl>
+            <div className="quality-notes">
+              <h4>Measurement quality</h4>
+              {[
+                ...new Set([...(sample?.warnings || []), ...result.warnings]),
+              ].map((w) => (
+                <p key={w}>
+                  <Info size={13} />
+                  {w}
+                </p>
+              ))}
+              <p>
+                <Info size={13} />{" "}
+                {result.interpolated
+                  ? "Decimal result is interpolation, not validated analytical precision."
+                  : "Reference matching does not establish analytical accuracy."}
+              </p>
+            </div>
+            <button className="button secondary full" onClick={exportResult}>
+              <ArrowDownToLine size={15} /> Export measurement
+            </button>
+          </>
+        ) : (
+          <div className="empty-result">
+            <FlaskConical size={36} />
+            <h3>A little color. A useful clue.</h3>
+            <p>
+              Select the colored area of a test strip to compare it with your
+              reference profile.
+            </p>
+          </div>
+        )}
+      </section>
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>Compare with a pH meter</h2>
+          <span className="status-badge">OPTIONAL</span>
+        </div>
+        <p className="muted">Record a paired reading from the same sample.</p>
+        <label className="field">
+          Laboratory reference pH
+          <input
+            type="number"
+            min="0"
+            max="14"
+            step="0.01"
+            value={meter}
+            placeholder="e.g. 7.10"
+            onChange={(e) => setMeter(e.target.value)}
+          />
+        </label>
+        {!synthetic && (
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+            />{" "}
+            This is a real strip and paired meter measurement.
+          </label>
+        )}
+        {meter !== "" && !validMeter && (
+          <p className="form-error">Enter a finite pH from 0 to 14.</p>
+        )}
+        {validMeter && result?.estimate != null && (
+          <div className="stat-pair">
+            <div>
+              <small>Signed error</small>
+              <strong>{(result.estimate - Number(meter)).toFixed(2)}</strong>
+            </div>
+            <div>
+              <small>Absolute error</small>
+              <strong>
+                {Math.abs(result.estimate - Number(meter)).toFixed(2)}
+              </strong>
+            </div>
+          </div>
+        )}
+        <button
+          className="button secondary full"
+          disabled={!canRecord}
+          onClick={record}
+        >
+          <Plus size={15} /> Add comparison
+        </button>
+        {records.length > 0 && (
+          <div className="records">
+            <div className="panel-heading">
+              <h3>Session comparisons</h3>
+              <button
+                className="icon-button"
+                aria-label="Clear comparisons"
+                onClick={() => setRecords([])}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+            {metrics && (
+              <div className="stat-pair">
+                <div>
+                  <small>MAE · {realRecords.length} real pair(s)</small>
+                  <strong>{metrics.mae.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <small>RMSE</small>
+                  <strong>{metrics.rmse.toFixed(2)}</strong>
+                </div>
+              </div>
+            )}
+            <svg
+              className="comparison-chart"
+              viewBox="0 0 300 200"
+              role="img"
+              aria-label="Meter reference versus estimated pH; dashed line shows equality"
+            >
+              <line
+                x1="35"
+                y1="165"
+                x2="275"
+                y2="25"
+                stroke="#a9bcb5"
+                strokeDasharray="4 4"
+              />
+              <path d="M35 20V165H280" fill="none" stroke="#b8c8c1" />
+              {[0, 7, 14].map((v) => (
+                <g key={v}>
+                  <text x={35 + (v / 14) * 240} y="181" textAnchor="middle">
+                    {v}
+                  </text>
+                  <text x="25" y={169 - (v / 14) * 140} textAnchor="end">
+                    {v}
+                  </text>
+                </g>
+              ))}
+              {records.map((r) => (
+                <circle
+                  key={r.id}
+                  cx={35 + (r.reference / 14) * 240}
+                  cy={165 - (r.estimate / 14) * 140}
+                  r="4"
+                  fill={r.synthetic ? "#be8b4a" : "#2b7562"}
+                >
+                  <title>
+                    {r.synthetic ? "Synthetic" : "Real"}: reference{" "}
+                    {r.reference}, estimate {r.estimate.toFixed(2)}
+                  </title>
+                </circle>
+              ))}
+              <text x="155" y="198" textAnchor="middle">
+                Meter reference pH
+              </text>
+              <text
+                x="8"
+                y="95"
+                transform="rotate(-90 8 95)"
+                textAnchor="middle"
+              >
+                Estimated pH
+              </text>
+            </svg>
+            <div className="record-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Estimate</th>
+                    <th>Meter</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.synthetic ? "Demo" : "Real"}</td>
+                      <td>{r.estimate.toFixed(2)}</td>
+                      <td>{r.reference.toFixed(2)}</td>
+                      <td>{r.error.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="fine-print">
+              Demo pairs are excluded from MAE/RMSE. These statistics describe
+              your recorded pairs only, not validated accuracy.
+            </p>
+            <button
+              className="button subtle full"
+              onClick={() =>
+                download(
+                  "pocketsense-comparisons.csv",
+                  toCsv(records),
+                  "text/csv",
+                )
+              }
+            >
+              <ArrowDownToLine size={14} /> Export comparison CSV
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Workspace({
+  kind,
+  notify,
+}: {
+  kind: "color" | "ph";
+  notify: (t: string) => void;
+}) {
+  const [image, setImage] = useState<LoadedImage | null>(null);
+  const [sample, setSample] = useState<Sample | null>(null);
+  const [rect, setRect] = useState<Rect | null>(null);
+  return (
+    <section className="workspace-page section-enter">
+      <div className="workspace-title">
+        <div>
+          <a href="#home" className="breadcrumb">
+            Your pocket lab <ChevronRight size={13} />
+          </a>
+          <h1>
+            {kind === "ph" ? "pH" : "Color"} Sense<span>.</span>
+          </h1>
+          <p>
+            {kind === "ph"
+              ? "A photograph. A reference. A little more understanding."
+              : "Find the extraordinary in every shade."}
+          </p>
+        </div>
+        <span className="local-pill">
+          <LockKeyhole size={13} /> Processed on your device
+        </span>
+      </div>
+      <div className="workspace-grid">
+        <div className="workspace-image-column">
+          <div className="panel-heading">
+            <h2>
+              <ScanLine size={18} />{" "}
+              {kind === "ph" ? "Select your test strip" : "Start with an image"}
+            </h2>
+            <span className="step-label">01</span>
+          </div>
+          <ImageWorkspace
+            kind={kind}
+            onImage={setImage}
+            onSelection={(next, selection) => {
+              setSample(next);
+              setRect(selection);
+            }}
+          />
+          <div className="workflow-tip">
+            <Info size={17} />
+            <div>
+              <strong>
+                {kind === "ph"
+                  ? "Better comparisons start with better photos."
+                  : "Every pixel has a story."}
+              </strong>
+              <p>
+                {kind === "ph"
+                  ? "Use even lighting, avoid reflections, and include the compatible reference chart in the same photo. Select only the colored measurement area."
+                  : "Tap a pixel for its exact RGB, or drag a region to explore mean and median color. Zoom in to make a precise selection."}
+              </p>
+            </div>
+          </div>
+          {sample?.warnings.length ? (
+            <div className="quality-notes image-quality">
+              <h4>Image quality notes</h4>
+              {sample.warnings.map((w) => (
+                <p key={w}>
+                  <Info size={13} />
+                  {w}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {kind === "color" ? (
+          <ColorResults image={image} sample={sample} notify={notify} />
+        ) : (
+          <PhResults
+            sample={sample}
+            image={image}
+            rect={rect}
+            notify={notify}
+          />
         )}
       </div>
-      <div className="color-values">
-        <button
-          onClick={() =>
-            stats && copy(`rgb(${stats.robust.map(Math.round).join(", ")})`)
-          }
-          disabled={!stats}
-        >
-          <span>
-            RGB <Copy size={12} />
-          </span>
-          <b>{stats ? stats.robust.map(Math.round).join(" / ") : "—"}</b>
-        </button>
-        <div>
-          <span>CIELAB · D65</span>
-          <b>{labValue?.map((v) => v.toFixed(1)).join(" / ") ?? "—"}</b>
-        </div>
-        <div>
-          <span>HSL</span>
-          <b>
-            {cyl
-              ? `${cyl.hsl[0].toFixed(0)}° / ${cyl.hsl[1].toFixed(0)}% / ${cyl.hsl[2].toFixed(0)}%`
-              : "—"}
-          </b>
-        </div>
-        <div>
-          <span>HSV</span>
-          <b>
-            {cyl
-              ? `${cyl.hsv[0].toFixed(0)}° / ${cyl.hsv[1].toFixed(0)}% / ${cyl.hsv[2].toFixed(0)}%`
-              : "—"}
-          </b>
-        </div>
-      </div>
-    </>
+    </section>
   );
+}
+
+export default function App() {
+  const [route, setRoute] = useState<Route>(routeFromHash);
+  const [notice, setNotice] = useState("");
+  const [offline, setOffline] = useState(false);
+  const [connected, setConnected] = useState(navigator.onLine);
+  const [offlineError, setOfflineError] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const change = () => {
+      setRoute(routeFromHash());
+      window.scrollTo({ top: 0, behavior: "instant" });
+      mainRef.current?.focus();
+    };
+    window.addEventListener("hashchange", change);
+    return () => window.removeEventListener("hashchange", change);
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const id = setTimeout(() => setNotice(""), 4500);
+    return () => clearTimeout(id);
+  }, [notice]);
+  useEffect(() => {
+    let active = true;
+    const update = () => setConnected(navigator.onLine);
+    const fail = () => setOfflineError(true);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    window.addEventListener("pocketsense:offline-error", fail);
+    if (import.meta.env.PROD && "serviceWorker" in navigator) {
+      void navigator.serviceWorker.ready.then(() => {
+        if (active) setOffline(true);
+      });
+    }
+    return () => {
+      active = false;
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+      window.removeEventListener("pocketsense:offline-error", fail);
+    };
+  }, []);
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand" onClick={() => go("home")}>
-          <span className="brand-mark">
-            <Aperture size={25} />
-          </span>
-          <span>
-            PocketSense<small>YOUR EVERYDAY LAB</small>
-          </span>
-        </button>
-        <div className="nav-caption">WORKSPACE</div>
-        <nav>
-          {nav.map((n) => (
-            <button
-              key={n.id}
-              className={page === n.id ? "active" : ""}
-              onClick={() => go(n.id as Page)}
-            >
-              <n.icon size={20} />
-              <span>
-                {n.label}
-                <small>{n.en}</small>
-              </span>
-              {page === n.id && <i />}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="privacy-card">
-            <ShieldCheck size={22} />
-            <strong>Your data stays yours.</strong>
-            <p>
-              Your photos stay private.
-              <br />
-              All analysis runs on your device.
-            </p>
-            <span>
-              <i className="live-dot" /> LOCAL-FIRST ENGINE
-            </span>
-          </div>
-          <button
-            className={
-              page === "about" ? "about-button active" : "about-button"
+    <>
+      <a
+        href="#main-content"
+        className="skip-link"
+        onClick={(e) => {
+          e.preventDefault();
+          mainRef.current?.focus();
+        }}
+      >
+        Skip to content
+      </a>
+      <header className="site-header">
+        <div className="header-inner">
+          <Brand />
+          <nav aria-label="Main navigation">
+            {(
+              [
+                { id: "home", text: "Overview" },
+                { id: "ph", text: "pH Sense" },
+                { id: "color", text: "Color Sense" },
+                { id: "about", text: "About" },
+              ] as const
+            ).map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                aria-current={route === item.id ? "page" : undefined}
+              >
+                {item.text}
+              </a>
+            ))}
+          </nav>
+          <span
+            className={`connection-status ${offline ? "is-ready" : ""}`}
+            title={
+              offline
+                ? "Application files cached for offline use"
+                : offlineError
+                  ? "Offline cache failed. Reload online to retry."
+                  : "Offline cache becomes available after loading the production app."
             }
-            onClick={() => go("about")}
           >
-            <Info size={17} /> About & privacy <ArrowUpRight size={15} />
-          </button>
-          <div className="version">
-            POCKETSENSE <span>v1.1 / EXPERIMENTAL</span>
-          </div>
+            <span />
+            {!connected
+              ? "Offline mode"
+              : offline
+                ? "Offline ready"
+                : offlineError
+                  ? "Cache unavailable"
+                  : "Local & private"}
+          </span>
         </div>
-      </aside>
-      <div className="main-shell">
-        <header className="topbar">
-          <span className="breadcrumb">
-            WORKSPACE <span>/</span>{" "}
-            {nav.find((n) => n.id === page)?.en ?? "About & Privacy"}
-          </span>
-          <div className="status-row">
-            <span className={"status-pill " + (offlineReady ? "ready" : "")}>
-              {online ? <ShieldCheck size={14} /> : <WifiOff size={14} />}
-              <span>
-                {!online
-                  ? "Working offline"
-                  : offlineReady
-                    ? "Offline ready"
-                    : cacheError
-                      ? "Offline cache unavailable"
-                      : "On-device processing"}
-              </span>
-            </span>
-            <button className="help-button" onClick={() => go("about")}>
-              User guide <Info size={16} />
-            </button>
-          </div>
-        </header>
-        <main>
-          {page === "home" && <Home go={go} demo={demo} />}
-          {["ph", "color", "light"].includes(page) && (
-            <>
-              <div className="page-heading">
-                <div>
-                  <span className="eyebrow">
-                    POCKETSENSE /{" "}
-                    {page === "ph"
-                      ? "COLORIMETRIC SENSING"
-                      : page === "color"
-                        ? "COLOR DISCOVERY"
-                        : "LIGHTING & CALIBRATION"}
-                  </span>
-                  <h1>
-                    {page === "ph"
-                      ? "pH Sense"
-                      : page === "color"
-                        ? "Color Sense"
-                        : "Light Sense"}
-                    <span>
-                      {page === "ph"
-                        ? "Read the color. Explore the chemistry."
-                        : page === "color"
-                          ? "Find the numbers behind every color."
-                          : "Give your colors a neutral reference."}
-                    </span>
-                  </h1>
-                  <p>
-                    {page === "ph"
-                      ? "Sample a photo. Match your reference chart. Validate the estimate with real measurements."
-                      : page === "color"
-                        ? "Tap a point or select a region to reveal color values and a palette worth keeping."
-                        : "Inspect exposure and use a known neutral patch to help reduce color cast."}
-                  </p>
-                </div>
-                <button
-                  className="button secondary small"
-                  onClick={() => {
-                    demo(page === "color" ? "color" : "ph");
-                    if (page === "light") setPage("light");
-                  }}
-                >
-                  Load demo <ArrowRight size={15} />
-                </button>
-              </div>
-              {photo?.demo && (
-                <div className="demo-banner">
-                  <FlaskConical size={17} />
-                  <span>
-                    Demo mode: synthetic images and references, processed by
-                    real algorithms. These are not experimental validation
-                    results.
-                  </span>
-                </div>
-              )}
-              <div className="workbench">
-                <div className="workbench-main">
-                  <ImageWorkspace
-                    photo={photo}
-                    pixels={pixels}
-                    roi={roi}
-                    reference={refRegion}
-                    target={target}
-                    onSelect={(r) =>
-                      target === "reference" ? setRefRegion(r) : setRoi(r)
-                    }
-                    onFile={upload}
-                    onDemo={() => {
-                      demo(page === "color" ? "color" : "ph");
-                      if (page === "light") setPage("light");
-                    }}
-                    onRemove={() => {
-                      fileToken.current++;
-                      setBusy(false);
-                      resetImage(null);
-                    }}
-                    busy={busy}
-                    corrected={!!gains}
-                  />
-                  {error && (
-                    <div className="error" role="alert">
-                      {error}
-                      <button
-                        aria-label="Dismiss error"
-                        onClick={() => setError("")}
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-                  )}
-                  {photo && (
-                    <div className="calibration-strip">
-                      <span>
-                        <SlidersHorizontal size={17} />
-                        {gains
-                          ? "Neutral-reference correction is on"
-                          : "Using original colors"}
-                      </span>
-                      <button
-                        className="text-button"
-                        onClick={() => go("light")}
-                      >
-                        {gains ? "View correction" : "Set up correction"}{" "}
-                        <ArrowUpRight size={15} />
-                      </button>
-                    </div>
-                  )}
-                  {page === "ph" && (
-                    <section className="panel">
-                      <div className="panel-heading">
-                        <div>
-                          <span className="eyebrow">
-                            02 / REFERENCE PROFILE
-                          </span>
-                          <h3>Choose a chart for your test strip</h3>
-                        </div>
-                        <button
-                          className="text-button"
-                          onClick={() => {
-                            setEditing(null);
-                            setEditor(!editor);
-                          }}
-                        >
-                          <Plus size={16} />
-                          New profile
-                        </button>
-                      </div>
-                      <div className="panel-body">
-                        <label className="sr-only" htmlFor="profile">
-                          Reference profile
-                        </label>
-                        <select
-                          id="profile"
-                          value={selectedId}
-                          onChange={(e) => setSelectedId(e.target.value)}
-                        >
-                          <option value="">
-                            Select a profile for your strip brand / batch
-                          </option>
-                          <option value="demo-v1">
-                            Synthetic demo chart · Not for real measurements
-                          </option>
-                          {profiles.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                        {profile ? (
-                          <>
-                            <div className="reference-swatches">
-                              {profile.patches.map((p) => (
-                                <div key={p.ph}>
-                                  <i style={{ background: p.hex }} />
-                                  <span>{p.ph}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <p className="muted small-text">
-                              {profile.basis === "same-image"
-                                ? "Same-photo reference: correction applies to both the sample and chart. Confirm that these patches come from the current photo."
-                                : "Known RGB reference: correction applies only to the sample. Reference colors must match your strip and reading conditions."}
-                            </p>
-                            <div className="actions">
-                              <button
-                                className="text-button"
-                                onClick={() => {
-                                  setEditing(profile);
-                                  setEditor(true);
-                                }}
-                              >
-                                Edit profile
-                              </button>
-                              <button
-                                className="text-button"
-                                onClick={() =>
-                                  download(
-                                    "pocketsense-profile.json",
-                                    JSON.stringify(profile, null, 2),
-                                  )
-                                }
-                              >
-                                <Download size={14} />
-                                Export profile
-                              </button>
-                              {!profile.synthetic && (
-                                <button
-                                  className="text-button"
-                                  onClick={() => {
-                                    const next = profiles.filter(
-                                      (p) => p.id !== profile.id,
-                                    );
-                                    try {
-                                      localStorage.setItem(
-                                        "ps.profiles",
-                                        JSON.stringify(next),
-                                      );
-                                      setProfiles(next);
-                                      setSelectedId("");
-                                    } catch {
-                                      setError(
-                                        "Could not update local storage.",
-                                      );
-                                    }
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <p className="muted small-text">
-                            Different strips use different dye systems. Create
-                            or import a matching reference profile before
-                            estimating pH.
-                          </p>
-                        )}
-                        <label className="text-button import-link">
-                          <Upload size={14} />
-                          Import profile JSON
-                          <input
-                            type="file"
-                            accept="application/json,.json"
-                            hidden
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) void importProfile(f);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        <label className="check-label">
-                          <input
-                            type="checkbox"
-                            checked={interpolate}
-                            onChange={(e) => setInterpolate(e.target.checked)}
-                          />
-                          Interpolate between adjacent references (experimental)
-                        </label>
-                      </div>
-                    </section>
-                  )}
-                  {editor && page === "ph" && (
-                    <ProfileEditor
-                      key={editing?.id ?? "new"}
-                      initial={editing}
-                      sample={rawStats?.robust ?? null}
-                      onClose={() => setEditor(false)}
-                      onSave={saveProfile}
-                    />
-                  )}
-                  {page === "color" && (
-                    <section className="panel">
-                      <div className="panel-heading">
-                        <div>
-                          <span className="eyebrow">02 / IMAGE PALETTE</span>
-                          <h3>A palette to take with you</h3>
-                        </div>
-                        <div className="segmented">
-                          {[5, 8].map((n) => (
-                            <button
-                              key={n}
-                              className={paletteCount === n ? "active" : ""}
-                              onClick={() => setPaletteCount(n)}
-                            >
-                              {n} colors
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="panel-body">
-                        {paletteColors.length ? (
-                          <>
-                            <div className="palette-grid">
-                              {paletteColors.map((p, i) => (
-                                <button
-                                  key={i}
-                                  onClick={() => copy(hex(p.rgb))}
-                                  title={"RGB " + p.rgb.join(", ")}
-                                >
-                                  <i style={{ background: hex(p.rgb) }} />
-                                  <strong>{hex(p.rgb)}</strong>
-                                  <span>
-                                    {(p.share * 100).toFixed(1)}% · RGB{" "}
-                                    {p.rgb.join(" / ")}
-                                  </span>
-                                </button>
-                              ))}
-                            </div>
-                            <div className="actions">
-                              <button
-                                className="text-button"
-                                onClick={() =>
-                                  download(
-                                    "pocketsense-palette.json",
-                                    JSON.stringify(
-                                      {
-                                        space: "sRGB",
-                                        algorithm: "Lab k-means",
-                                        synthetic: photo?.demo,
-                                        colors: paletteColors.map((p) => ({
-                                          ...p,
-                                          hex: hex(p.rgb),
-                                        })),
-                                      },
-                                      null,
-                                      2,
-                                    ),
-                                  )
-                                }
-                              >
-                                <Download size={14} />
-                                JSON
-                              </button>
-                              <button
-                                className="text-button"
-                                onClick={() =>
-                                  download(
-                                    "pocketsense-palette.csv",
-                                    csv(
-                                      paletteColors.map((p) => ({
-                                        hex: hex(p.rgb),
-                                        red: p.rgb[0],
-                                        green: p.rgb[1],
-                                        blue: p.rgb[2],
-                                        share: p.share,
-                                      })),
-                                    ),
-                                    "text/csv;charset=utf-8",
-                                  )
-                                }
-                              >
-                                <Download size={14} />
-                                CSV
-                              </button>
-                            </div>
-                            <small className="muted">
-                              Lab clustering across the full image. Tap a swatch
-                              to copy HEX. Transparent pixels are excluded.
-                            </small>
-                          </>
-                        ) : (
-                          <p className="empty-small">
-                            Load a photo to extract its representative colors.
-                          </p>
-                        )}
-                      </div>
-                    </section>
-                  )}
-                  {page === "light" && (
-                    <section className="panel">
-                      <div className="panel-heading">
-                        <div>
-                          <span className="eyebrow">
-                            02 / NEUTRAL REFERENCE
-                          </span>
-                          <h3>Balance color with a neutral reference</h3>
-                        </div>
-                        <Sun size={21} />
-                      </div>
-                      <div className="panel-body">
-                        <p className="muted">
-                          Select a known neutral gray or white patch in the
-                          photo. Ordinary paper can contain optical brighteners
-                          and is not a certified reference.
-                        </p>
-                        <div className="actions">
-                          <button
-                            className={
-                              "button " +
-                              (target === "reference" ? "primary" : "secondary")
-                            }
-                            disabled={!photo}
-                            onClick={() =>
-                              setTarget(
-                                target === "reference" ? "sample" : "reference",
-                              )
-                            }
-                          >
-                            {target === "reference"
-                              ? "Finish reference selection"
-                              : "Select neutral reference"}
-                          </button>
-                          <button
-                            className="text-button"
-                            disabled={!refRegion}
-                            onClick={() => {
-                              setRefRegion(null);
-                              setCorrection(false);
-                              setTarget("sample");
-                            }}
-                          >
-                            <RotateCcw size={14} />
-                            Reset
-                          </button>
-                        </div>
-                        {calibration && (
-                          <p
-                            className={
-                              calibration.gains
-                                ? "success-text"
-                                : "warning-text"
-                            }
-                          >
-                            {calibration.reason}
-                          </p>
-                        )}
-                        <label className="check-label">
-                          <input
-                            type="checkbox"
-                            checked={correction && !!calibration?.gains}
-                            disabled={!calibration?.gains}
-                            onChange={(e) => setCorrection(e.target.checked)}
-                          />
-                          Apply reference correction to the image and all
-                          sensing modules
-                        </label>
-                        {rawStats && stats && (
-                          <div className="comparison">
-                            <div>
-                              <i style={{ background: hex(rawStats.robust) }} />
-                              <span>Original sample</span>
-                              <b>
-                                {rawStats.robust.map(Math.round).join(" / ")}
-                              </b>
-                            </div>
-                            <ArrowRight size={20} />
-                            <div>
-                              <i style={{ background: hex(stats.robust) }} />
-                              <span>
-                                {gains
-                                  ? "Corrected sample"
-                                  : "Correction is off"}
-                              </span>
-                              <b>{stats.robust.map(Math.round).join(" / ")}</b>
-                            </div>
-                          </div>
-                        )}
-                        {calibration?.gains && (
-                          <small className="muted">
-                            Linear RGB gains:{" "}
-                            {calibration.gains
-                              .map((g) => g.toFixed(3))
-                              .join(" / ")}
-                            . This is not absolute colorimetric calibration.
-                          </small>
-                        )}
-                      </div>
-                    </section>
-                  )}
-                  {photo && stats && (
-                    <section className="panel">
-                      <div className="panel-heading">
-                        <div>
-                          <span className="eyebrow">DATA / EXPORT</span>
-                          <h3>Keep this discovery</h3>
-                        </div>
-                        <Download size={18} />
-                      </div>
-                      <div className="panel-body">
-                        <label>
-                          Sample name
-                          <input
-                            value={sampleName}
-                            placeholder={photo.name}
-                            maxLength={120}
-                            onChange={(e) => setSampleName(e.target.value)}
-                          />
-                        </label>
-                        <div className="actions export-actions">
-                          <button
-                            className="button primary"
-                            onClick={saveMeasurement}
-                          >
-                            <Plus size={16} />
-                            Add record
-                          </button>
-                          <button
-                            className="button secondary"
-                            onClick={() => exportCurrent("json")}
-                          >
-                            JSON
-                          </button>
-                          <button
-                            className="button secondary"
-                            onClick={() => exportCurrent("csv")}
-                          >
-                            CSV
-                          </button>
-                        </div>
-                        <small className="muted">
-                          Export colors, selection, reference profile,
-                          correction settings and quality flags. Photos are not
-                          stored with records.
-                        </small>
-                      </div>
-                    </section>
-                  )}
-                </div>
-                <aside className="results-column">
-                  <section className="panel results-panel">
-                    <div className="panel-heading">
-                      <div>
-                        <span className="eyebrow">LIVE READOUT</span>
-                        <h3>
-                          {page === "ph"
-                            ? "Your reading"
-                            : page === "color"
-                              ? "Selected color"
-                              : "Lighting overview"}
-                        </h3>
-                      </div>
-                      <span className="live-dot" />
-                    </div>
-                    {page === "ph" ? (
-                      <>
-                        <div className="ph-result">
-                          <span>
-                            {profile?.synthetic ? "Synthetic demo · " : ""}
-                            {result?.method === "interpolated"
-                              ? "Local interpolation estimate"
-                              : "Nearest reference category"}
-                          </span>
-                          <div>
-                            <strong data-testid="ph-value">
-                              {result?.estimate != null
-                                ? result.method === "interpolated"
-                                  ? result.estimate.toFixed(1)
-                                  : String(result.estimate)
-                                : "—"}
-                            </strong>
-                            <b>pH</b>
-                          </div>
-                          <p>
-                            {!photo
-                              ? "Load a photo to start sensing"
-                              : !profile
-                                ? "A matching reference profile is required"
-                                : !stats
-                                  ? "Select a region with opaque pixels"
-                                  : result?.estimate === null
-                                    ? "Color mismatch is too large for an estimate"
-                                    : `Reference label span ${result!.interval[0]}–${result!.interval[1]}`}
-                          </p>
-                          <small>
-                            This label span is not a confidence interval or
-                            validated error bound.
-                          </small>
-                        </div>
-                        <div className="ph-spectrum">
-                          {[
-                            "#C57566",
-                            "#D49A64",
-                            "#C9B96C",
-                            "#A8B781",
-                            "#7CA796",
-                            "#7189A0",
-                            "#8E7FA1",
-                          ].map((c) => (
-                            <i style={{ background: c }} key={c} />
-                          ))}
-                        </div>
-                        {result && stats && (
-                          <div className="match-details">
-                            <div className="comparison">
-                              <div>
-                                <i style={{ background: hex(stats.robust) }} />
-                                <span>Sample</span>
-                              </div>
-                              <ArrowRight size={17} />
-                              <div>
-                                <i
-                                  style={{
-                                    background: hex(result.referenceRGB),
-                                  }}
-                                />
-                                <span>Reference pH {result.nearest.ph}</span>
-                              </div>
-                            </div>
-                            <div className="mini-stats">
-                              <Stat
-                                label="Color difference ΔE00"
-                                value={result.delta.toFixed(2)}
-                              />
-                              <Stat
-                                label="Reference points"
-                                value={String(profile!.patches.length)}
-                              />
-                            </div>
-                          </div>
-                        )}
-                        <div className="panel-body">{colorReadout}</div>
-                      </>
-                    ) : page === "color" ? (
-                      <div className="panel-body">{colorReadout}</div>
-                    ) : (
-                      <div className="panel-body">
-                        {wholeStats ? (
-                          <>
-                            <div className="light-score">
-                              <Sun size={34} />
-                              <strong>
-                                {(wholeStats.brightness * 100).toFixed(1)}
-                                <small>%</small>
-                              </strong>
-                              <span>
-                                Mean relative luminance · Original image
-                              </span>
-                            </div>
-                            <div
-                              className="histogram"
-                              aria-label="Original image linear relative luminance histogram"
-                            >
-                              {wholeStats.histogram.map((v, i) => (
-                                <i
-                                  key={i}
-                                  style={{
-                                    height: `${Math.max(1, (v / Math.max(...wholeStats.histogram)) * 100)}%`,
-                                  }}
-                                />
-                              ))}
-                            </div>
-                            <div className="histogram-label">
-                              <span>Dark</span>
-                              <span>Bright</span>
-                            </div>
-                            <div className="mini-stats">
-                              <Stat
-                                label="Clipped highlights"
-                                value={(wholeStats.highlights * 100).toFixed(1)}
-                                suffix="%"
-                              />
-                              <Stat
-                                label="Near-black pixels"
-                                value={(wholeStats.dark * 100).toFixed(1)}
-                                suffix="%"
-                              />
-                              <Stat
-                                label="Any-channel clipping"
-                                value={(wholeStats.channelClip * 100).toFixed(
-                                  1,
-                                )}
-                                suffix="%"
-                              />
-                              <Stat
-                                label="Luminance SD"
-                                value={wholeStats.contrast.toFixed(3)}
-                              />
-                            </div>
-                          </>
-                        ) : (
-                          <p className="empty-small">
-                            Load a photo to see its luminance histogram and
-                            exposure indicators.
-                          </p>
-                        )}
-                        <div className="science-note">
-                          Pixel values depend on exposure, white balance and
-                          camera processing. These are relative luminance
-                          measurements, not illuminance in lux.
-                        </div>
-                      </div>
-                    )}
-                  </section>
-                  {stats && (
-                    <section className="panel">
-                      <div className="panel-heading">
-                        <h3>Quality checks</h3>
-                        <ShieldCheck size={18} />
-                      </div>
-                      <div className="panel-body">
-                        <Notes
-                          notes={
-                            page === "light" && wholeStats
-                              ? quality(wholeStats)
-                              : qc
-                          }
-                        />
-                        {page === "ph" && result && (
-                          <Notes notes={result.warnings} />
-                        )}
-                        <div className="quality-footer">
-                          <span>Sampled pixels</span>
-                          <b>{stats.count.toLocaleString("en-US")} px</b>
-                        </div>
-                        <details className="statistics">
-                          <summary>Region statistics and method</summary>
-                          <p>
-                            The representative color uses a 10% trimmed mean per
-                            channel. Large regions use a regular grid of up to
-                            about 40,000 pixels.
-                          </p>
-                          <dl>
-                            <dt>Mean RGB</dt>
-                            <dd>
-                              {stats.mean.map((v) => v.toFixed(1)).join(" / ")}
-                            </dd>
-                            <dt>Median RGB</dt>
-                            <dd>
-                              {stats.median
-                                .map((v) => v.toFixed(1))
-                                .join(" / ")}
-                            </dd>
-                            <dt>RGB standard deviation</dt>
-                            <dd>
-                              {stats.std.map((v) => v.toFixed(1)).join(" / ")}
-                            </dd>
-                          </dl>
-                        </details>
-                      </div>
-                    </section>
-                  )}
-                  {page === "ph" && (
-                    <section className="panel">
-                      <div className="panel-heading">
-                        <h3>Compare with a pH meter</h3>
-                        <FlaskConical size={18} />
-                      </div>
-                      <div className="panel-body">
-                        <label>
-                          Meter pH
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="14"
-                            placeholder="Enter the meter reading for this sample"
-                            value={referencePH}
-                            onChange={(e) => setReferencePH(e.target.value)}
-                          />
-                        </label>
-                        {referencePH && !validMeter && (
-                          <p className="error">
-                            Enter a valid number between 0 and 14.
-                          </p>
-                        )}
-                        {result?.estimate != null && validMeter && (
-                          <div className="mini-stats">
-                            <Stat
-                              label="Estimate − meter"
-                              value={(result.estimate - +referencePH).toFixed(
-                                2,
-                              )}
-                            />
-                            <Stat
-                              label="Absolute error"
-                              value={Math.abs(
-                                result.estimate - +referencePH,
-                              ).toFixed(2)}
-                            />
-                          </div>
-                        )}
-                        <p className="muted small-text">
-                          Save records to see MAE and RMSE in your notebook.
-                          Synthetic demo data are excluded from validation
-                          statistics.
-                        </p>
-                      </div>
-                    </section>
-                  )}
-                  <div className="research-note">
-                    <FlaskConical size={18} />
-                    <p>
-                      Experimental color analysis. Validate your strip, sampling
-                      method and read time. Not for medical diagnosis.
-                    </p>
-                  </div>
-                </aside>
-              </div>
-            </>
-          )}
-          {page === "history" && (
-            <>
-              <div className="page-heading">
-                <div>
-                  <span className="eyebrow">YOUR EXPERIMENT NOTEBOOK</span>
-                  <h1>Notebook</h1>
-                  <p>Build better evidence, one real measurement at a time.</p>
-                </div>
-                <button
-                  className="button secondary"
-                  disabled={!history.length}
-                  onClick={() =>
-                    download(
-                      "pocketsense-history.json",
-                      JSON.stringify(history, null, 2),
-                    )
-                  }
-                >
-                  <Download size={16} />
-                  JSON
-                </button>
-                <button
-                  className="button secondary"
-                  disabled={!history.length}
-                  onClick={() =>
-                    download(
-                      "pocketsense-history.csv",
-                      csv(history),
-                      "text/csv;charset=utf-8",
-                    )
-                  }
-                >
-                  CSV
-                </button>
-              </div>
-              <div className="panel panel-body">
-                <label className="check-label">
-                  <input
-                    type="checkbox"
-                    checked={persist}
-                    onChange={(e) => togglePersist(e.target.checked)}
-                  />
-                  Keep records on this device (up to 500; no photos)
-                </label>
-                <p className="muted">
-                  {persist
-                    ? "Records stay in this browser. Clearing site data will remove them, so export regularly."
-                    : "Records are kept for this session only and will be lost on refresh or close."}
-                </p>
-              </div>
-              {metrics ? (
-                <section className="validation-section">
-                  <div className="metric-grid">
-                    <Stat label="Validation pairs" value={String(metrics.n)} />
-                    <Stat
-                      label="Mean absolute error · MAE"
-                      value={metrics.mae.toFixed(3)}
-                    />
-                    <Stat
-                      label="Mean signed error · Bias"
-                      value={metrics.bias.toFixed(3)}
-                    />
-                    <Stat
-                      label="Root mean square error · RMSE"
-                      value={metrics.rmse.toFixed(3)}
-                    />
-                  </div>
-                  <div className="panel scatter-panel">
-                    <h3>Meter vs. estimate</h3>
-                    <svg
-                      viewBox="0 0 460 290"
-                      aria-label="pH meter versus PocketSense scatter plot"
-                    >
-                      <path d="M55 20V240H430" fill="none" stroke="#a2ada2" />
-                      <path
-                        d="M55 240L430 20"
-                        stroke="#bec5b9"
-                        strokeDasharray="5 5"
-                      />
-                      <text x="180" y="280">
-                        pH meter reading
-                      </text>
-                      <text x="16" y="185" transform="rotate(-90 16 185)">
-                        PocketSense estimate
-                      </text>
-                      {[0, 2, 4, 6, 8, 10, 12, 14].map((n) => (
-                        <g key={n}>
-                          <text
-                            x={55 + (n / 14) * 375}
-                            y="257"
-                            textAnchor="middle"
-                          >
-                            {n}
-                          </text>
-                          <text
-                            x="43"
-                            y={245 - (n / 14) * 220}
-                            textAnchor="end"
-                          >
-                            {n}
-                          </text>
-                        </g>
-                      ))}
-                      {validPairs.map((p, i) => (
-                        <circle
-                          key={i}
-                          cx={55 + (p.reference / 14) * 375}
-                          cy={240 - (p.estimate / 14) * 220}
-                          r="5"
-                          fill="#607c59"
-                          opacity=".75"
-                        >
-                          <title>
-                            {p.reference} → {p.estimate}
-                          </title>
-                        </circle>
-                      ))}
-                    </svg>
-                    <small className="muted">
-                      Includes uploaded photos with non-demo profiles and
-                      entered meter readings. Duplicate records affect these
-                      metrics.
-                    </small>
-                  </div>
-                </section>
-              ) : (
-                <div className="empty-state">
-                  <FlaskConical size={30} />
-                  <h3>Your first validation pair starts here</h3>
-                  <p>
-                    Use a real photo and your own chart, enter a pH meter
-                    reading, then save the record.
-                    <br />
-                    No experimental validation data are fabricated here.
-                  </p>
-                  <button className="text-button" onClick={() => go("ph")}>
-                    Start pH sensing <ArrowRight size={16} />
-                  </button>
-                </div>
-              )}
-              {history.length > 0 && (
-                <div className="panel history-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Sample / time</th>
-                        <th>Color</th>
-                        <th>pH estimate</th>
-                        <th>Meter</th>
-                        <th>Source</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {history.map((r) => (
-                        <tr key={r.id}>
-                          <td>
-                            <b>{r.sampleName}</b>
-                            <small>
-                              {new Date(r.timestamp).toLocaleString("en-US")}
-                            </small>
-                          </td>
-                          <td>
-                            <span
-                              className="inline-swatch"
-                              style={{ background: r.hex }}
-                            />
-                            {r.hex}
-                          </td>
-                          <td>{r.estimate ?? "—"}</td>
-                          <td>{r.referencePH ?? "—"}</td>
-                          <td>
-                            {r.imageKind === "synthetic" || r.profile?.synthetic
-                              ? "Synthetic demo"
-                              : "Uploaded photo"}
-                          </td>
-                          <td>
-                            <button
-                              className="icon-button"
-                              aria-label={"Delete record " + r.sampleName}
-                              onClick={() => {
-                                const next = history.filter(
-                                  (x) => x.id !== r.id,
-                                );
-                                setHistory(next);
-                                if (persist)
-                                  try {
-                                    localStorage.setItem(
-                                      "ps.history",
-                                      JSON.stringify(next),
-                                    );
-                                  } catch {
-                                    setError("Could not update local storage.");
-                                  }
-                              }}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-          {page === "about" && (
-            <>
-              <div className="page-heading">
-                <div>
-                  <span className="eyebrow">
-                    BUILT FOR CURIOSITY. GROUNDED IN SCIENCE.
-                  </span>
-                  <h1>Small pocket. Big possibilities.</h1>
-                  <p>
-                    How to use PocketSense, how it works, and where its
-                    scientific limits lie.
-                  </p>
-                </div>
-              </div>
-              <div className="about-grid">
-                <section className="panel panel-body">
-                  <ShieldCheck size={28} />
-                  <h2>Your photos stay on your device.</h2>
-                  <p>
-                    Your photographs are processed locally on your device.
-                    PocketSense does not upload images for analysis.
-                  </p>
-                  <p>
-                    No account, analysis API, tracking scripts or remote fonts.
-                    The app downloads on your first visit; decoding, color
-                    statistics and matching all run in your browser.
-                  </p>
-                  <h3>Use it offline</h3>
-                  <ol>
-                    <li>
-                      Open the site online and wait for the Offline ready badge
-                      in the top-right corner.
-                    </li>
-                    <li>
-                      Install from your browser menu, or choose Add to Home
-                      Screen from the Safari share menu. Open the installed app
-                      once while online.
-                    </li>
-                    <li>
-                      Switch to airplane mode, reopen the app, and capture or
-                      import a photo to continue.
-                    </li>
-                  </ol>
-                  <p className="muted">
-                    Browser cleanup, private browsing or low storage can remove
-                    the offline cache. Installation requires HTTPS or localhost.
-                  </p>
-                  {install && (
-                    <button
-                      className="button primary"
-                      onClick={() => {
-                        void install.prompt();
-                        setInstall(null);
-                      }}
-                    >
-                      Install PocketSense <Download size={17} />
-                    </button>
-                  )}
-                  <p className="status-line">
-                    Cache status:{" "}
-                    {offlineReady
-                      ? "Ready"
-                      : cacheError
-                        ? "Cache failed. Check browser permissions and available storage."
-                        : "Not yet confirmed"}
-                  </p>
-                </section>
-                <section className="panel panel-body">
-                  <FlaskConical size={28} />
-                  <h2>Make your measurements comparable.</h2>
-                  <ol>
-                    <li>
-                      Use the same strip brand and batch. Follow the
-                      manufacturer instructions and specified read time.
-                    </li>
-                    <li>
-                      Place the strip, chart and neutral reference in the same
-                      plane under uniform lighting.
-                    </li>
-                    <li>
-                      Avoid fingers, swabs, shadows, glare and automatic beauty
-                      filters in the sample region.
-                    </li>
-                    <li>
-                      Select the uniform center of the colored pad, choose its
-                      chart, and review quality flags.
-                    </li>
-                    <li>
-                      Repeat measurements against pH meter readings of the same
-                      sample before reporting accuracy.
-                    </li>
-                  </ol>
-                  <p>
-                    Swab transfer depends on sample quantity, surface residues,
-                    strip wetting and buffering capacity. Validate your
-                    swab-to-strip workflow directly; color similarity alone does
-                    not establish accuracy.
-                  </p>
-                  <p className="science-note">
-                    This release supports one colored pad. Multi-pad strips,
-                    automatic strip detection, cross-object normalized plot
-                    estimation and multi-reference matrix calibration remain
-                    future work.
-                  </p>
-                </section>
-                <section className="panel panel-body">
-                  <Palette size={28} />
-                  <h2>An explainable color engine</h2>
-                  <p>
-                    Photos are decoded to sRGB and proportionally resized to a
-                    maximum 1600-pixel long edge. Regions use a 10% trimmed
-                    mean, with mean, median and standard deviation also shown.
-                    Transparent pixels are excluded.
-                  </p>
-                  <p>
-                    Inverse sRGB gamma yields linear RGB, then XYZ and D65
-                    CIELAB. pH matching uses CIEDE2000 ΔE00; charts for
-                    different strip brands are not interchangeable. Palettes use
-                    deterministic k-means in Lab space.
-                  </p>
-                  <p>
-                    Optional interpolation searches a local Lab segment between
-                    adjacent references no more than 2 pH apart, with a residual
-                    limit and no extrapolation. Color-difference and quality
-                    thresholds are engineering heuristics that need experimental
-                    calibration.
-                  </p>
-                  <p>
-                    <a
-                      href="https://www.w3.org/Graphics/Color/sRGB"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      sRGB specification ↗
-                    </a>{" "}
-                    ·{" "}
-                    <a
-                      href="https://hajim.rochester.edu/ece/sites/gsharma/ciede2000/"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      CIEDE2000 and test data ↗
-                    </a>
-                  </p>
-                </section>
-                <section className="panel panel-body">
-                  <Sun size={28} />
-                  <h2>Understand what correction can do.</h2>
-                  <p>
-                    For neutral-reference linear RGB cᵢ, the target m is the
-                    mean of its three channels. Gains gᵢ = m / cᵢ are applied in
-                    linear space before re-encoding to sRGB. Poor references or
-                    gains outside 0.5–2 are rejected.
-                  </p>
-                  <p>
-                    This does not infer lux, restore clipped highlights, or
-                    fully remove errors from camera processing, spectral
-                    differences or mixed lighting. Luminance variation can also
-                    come from different objects and is not proof of uneven
-                    illumination.
-                  </p>
-                  <p>
-                    White paper is not a certified calibration standard.
-                    Displayed Lab values are not spectrophotometer measurements.
-                    Scientific use requires known standards, controlled capture
-                    conditions and independent validation.
-                  </p>
-                </section>
-              </div>
-              <section className="panel panel-body data-controls">
-                <h3>On-device data</h3>
-                <p className="muted">
-                  Remove saved profiles, records and preferences, and release
-                  the current photo. The offline app cache is retained.
-                </p>
-                {!clearConfirm ? (
-                  <button
-                    className="button secondary"
-                    onClick={() => setClearConfirm(true)}
-                  >
-                    <Trash2 size={16} />
-                    Clear PocketSense local data
-                  </button>
-                ) : (
-                  <div className="actions">
-                    <button
-                      className="button danger"
-                      onClick={() => {
-                        try {
-                          ["ps.history", "ps.profiles", "ps.persist"].forEach(
-                            (k) => localStorage.removeItem(k),
-                          );
-                          setProfiles([]);
-                          setHistory([]);
-                          setPersist(false);
-                          resetImage(null);
-                          setClearConfirm(false);
-                          setNotice("Local data cleared");
-                        } catch {
-                          setError(
-                            "Storage cleanup was blocked. Clear this site data from your browser settings.",
-                          );
-                        }
-                      }}
-                    >
-                      Confirm clear
-                    </button>
-                    <button
-                      className="button secondary"
-                      onClick={() => setClearConfirm(false)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </section>
-            </>
-          )}
-          {error && !["ph", "color", "light"].includes(page) && (
-            <div className="error" role="alert">
-              {error}
-            </div>
-          )}
-        </main>
-        <footer className="app-footer">
-          <span>
-            <Aperture size={14} /> PocketSense
-          </span>
-          <span>DEVICE-LOCAL · EXPERIMENTAL v1.1</span>
-          <span>Stay curious.</span>
-        </footer>
-      </div>
-      <nav className="mobile-nav">
-        {nav.map((n) => (
-          <button
-            key={n.id}
-            className={page === n.id ? "active" : ""}
-            onClick={() => go(n.id as Page)}
-          >
-            <n.icon size={20} />
-            <span>{n.label}</span>
-          </button>
-        ))}
-      </nav>
+      </header>
+      <main ref={mainRef} id="main-content" tabIndex={-1}>
+        {route === "home" ? (
+          <Home />
+        ) : route === "about" ? (
+          <About />
+        ) : (
+          <Workspace key={route} kind={route} notify={setNotice} />
+        )}
+      </main>
+      <footer>
+        <Brand small />
+        <span>Your camera. Your color sensor. Your data.</span>
+        <a
+          href="https://github.com/QiZhang1102/Pocket_Sense"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Github size={15} /> Made for the curious <ArrowRight size={14} />
+        </a>
+      </footer>
       {notice && (
         <div className="toast" role="status">
-          <Check size={17} />
+          <Check size={16} />
           {notice}
+          <button
+            className="icon-button"
+            aria-label="Dismiss notification"
+            onClick={() => setNotice("")}
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
-    </div>
+    </>
   );
 }

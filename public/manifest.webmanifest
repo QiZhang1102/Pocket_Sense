@@ -1,32 +1,17 @@
 {
   "id": "./",
-  "name": "PocketSense \u00b7 Your pocket color lab",
+  "name": "PocketSense — Your pocket color lab",
   "short_name": "PocketSense",
-  "description": "Offline photo color analysis and reference-based pH sensing",
+  "description": "Private, offline-capable photo color sampling and reference-guided pH exploration.",
   "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f7f8f2",
-  "theme_color": "#f7f8f2",
+  "background_color": "#f7f9f8",
+  "theme_color": "#087f73",
   "icons": [
-    {
-      "src": "./icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "./icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }
