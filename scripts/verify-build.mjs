@@ -31,6 +31,7 @@ for (const base of ["/", "/Pocket_Sense/", "/another-app/"]) {
   assert(config.ASSETS.includes(config.INDEX));
   for (const path of config.ASSETS) {
     assert(path.startsWith(base));
+    assert(!path.split("/").some(part => part.startsWith(".")), "Do not precache hidden hosting metadata");
     await access(fileURLToPath(new URL(path.slice(base.length), dist)));
   }
   for (const event of ["install", "activate", "fetch"]) assert(listeners[event]);

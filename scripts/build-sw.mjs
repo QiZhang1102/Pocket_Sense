@@ -19,7 +19,8 @@ async function walk(directory) {
 
 // Only application build outputs are precached. Uploaded photos never enter this list.
 const files = (await walk(dist))
-  .filter((file) => basename(file) !== "sw.js")
+  // Hosting metadata such as .nojekyll is not served by GitHub Pages.
+  .filter((file) => basename(file) !== "sw.js" && !basename(file).startsWith("."))
   .sort();
 if (!files.some((file) => relative(dist, file) === "index.html")) {
   throw new Error(
