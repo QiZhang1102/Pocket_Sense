@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="refresh" content="1;url=https://qizhang1102.github.io/Pocket_Sense/">
+  <link rel="canonical" href="https://qizhang1102.github.io/Pocket_Sense/">
+  <title>PocketSense — Opening the latest version</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #173c38; background: #f6f9f6; }
+    body { margin: 0; min-height: 100svh; display: grid; place-items: center; }
+    main { max-width: 30rem; padding: 2rem; }
+    h1 { font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.04em; }
+    p { line-height: 1.6; }
+    a { display: inline-block; padding: .9rem 1.2rem; color: white; background: #176a5e; border-radius: .7rem; font-weight: 600; text-decoration: none; }
+    a:focus-visible { outline: 3px solid #ad7d24; outline-offset: 4px; }
+  </style>
+  <script>
+    const canonical = "https://qizhang1102.github.io/Pocket_Sense/";
+    const hash = ["#home", "#ph", "#color", "#about"].includes(location.hash) ? location.hash : "";
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js", { scope: "./", updateViaCache: "none" }).catch(() => {});
+    }
+    location.replace(canonical + hash);
+  </script>
+</head>
+<body>
+  <main>
+    <p>PocketSense</p>
+    <h1>Opening the latest version.</h1>
+    <p>Your pocket color lab has moved. This link will take you to our current website.</p>
+    <a href="https://qizhang1102.github.io/Pocket_Sense/" rel="noreferrer">Open PocketSense</a>
+  </main>
+</body>
+</html>
