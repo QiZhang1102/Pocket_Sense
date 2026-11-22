@@ -252,6 +252,12 @@ function OwnerSession() {
             {r.rating != null && <span>Ease of use {r.rating}/5</span>}
           </div>
           <p className="fb-message">{r.message}</p>
+          <details className="fb-details">
+            <summary>Submission details</summary>
+            <p>
+              Receipt <code>{r.id}</code>
+            </p>
+          </details>
           <div className="fb-record-foot">
             {r.email && <span>{r.email}</span>}
             <label>

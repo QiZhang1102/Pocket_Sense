@@ -246,3 +246,17 @@
     flex-direction: column;
   }
 }
+
+.fb-details {
+  margin-bottom: 1rem;
+  color: #536b5d;
+  font-size: 0.85rem;
+}
+.fb-details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.fb-details p {
+  margin-top: 0.5rem;
+  overflow-wrap: anywhere;
+}
