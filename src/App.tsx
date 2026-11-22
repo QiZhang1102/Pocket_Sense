@@ -40,7 +40,11 @@ import {
 } from "./lib/ph";
 import { toCsv } from "./lib/export";
 
-type Route = "home" | "ph" | "color" | "about";
+import { FeatureDiscovery } from "./components/FeatureDiscovery";
+import { Feedback } from "./feedback/Feedback";
+import { OwnerDashboard } from "./feedback/OwnerDashboard";
+
+type Route = "home" | "ph" | "color" | "about" | "discover" | "feedback" | "admin";
 type Measurement = {
   id: string;
   time: string;
@@ -53,7 +57,7 @@ type Measurement = {
   hex: string;
 };
 const PROFILE_KEY = "pocketsense.profiles.v1";
-const routes: Route[] = ["home", "ph", "color", "about"];
+const routes: Route[] = ["home", "ph", "color", "about", "discover", "feedback", "admin"];
 const routeFromHash = (): Route => {
   const value = location.hash.slice(1) as Route;
   return routes.includes(value) ? value : "home";
@@ -278,8 +282,7 @@ function Home() {
         <div>
           <h3>Your photos stay with you.</h3>
           <p>
-            All image processing happens in your browser. No uploads. No
-            accounts. Just discovery.
+            Photos, sampled colors and reference profiles stay in your browser.
           </p>
         </div>
         <a href="#about">
@@ -315,8 +318,10 @@ function About() {
             until you leave or reload.
           </p>
           <p>
-            Exported files are saved only when you choose. There are no
-            accounts, analytics, runtime CDNs, or cloud image services.
+            Feedback is optional. When you choose Submit feedback, the feedback service
+            receives the text and form fields you enter, including any contact email.
+            Authorized project owners can review them. Your draft stays on this device
+            until you submit it or choose Clear draft. <a href="#feedback">Open feedback</a>.
           </p>
         </article>
         <article className="panel">
@@ -343,18 +348,13 @@ function About() {
           reflectance.
         </p>
         <p>
-          pH Sense compares median region color in D65 CIE Lab using CIEDE2000
-          color difference. Use a reference profile for the same strip
+          pH Sense compares median region color with a reference curve in D65 CIELAB using Euclidean distance. Use a reference profile for the same strip
           chemistry, with a similar camera and lighting. Sampling the chart and
           strip from the same photo can reduce some differences, but does not
           establish accuracy.
         </p>
         <p>
-          Local interpolation is allowed only when neighboring references
-          support it. The displayed bracket comes from the available reference
-          values; it is not a statistical confidence interval. Decimal digits
-          describe calculation, not validated precision. Ambiguous or distant
-          colors can produce no estimate.
+          The app searches a Catmull–Rom curve between reference colors at 0.01 pH intervals and includes the original reference points. A distant color can still produce an estimate with a warning. The bracket identifies the reference interval. Measurement accuracy requires independent comparison with a meter.
         </p>
         <p>
           The bundled profile and scenes are synthetic demonstrations, never
@@ -362,11 +362,11 @@ function About() {
           tool, not a clinical diagnostic device.
         </p>
         <a
-          href="https://hajim.rochester.edu/ece/sites/gsharma/ciede2000/"
+          href="https://github.com/QiZhang1102/Pocket_Sense/blob/main/docs/SCIENCE.md"
           target="_blank"
           rel="noreferrer"
         >
-          CIEDE2000 implementation reference <ArrowRight size={15} />
+          Scientific methods and limitations <ArrowRight size={15} />
         </a>
       </article>
     </section>
@@ -1412,7 +1412,8 @@ export default function App() {
                 { id: "home", text: "Overview" },
                 { id: "ph", text: "pH Sense" },
                 { id: "color", text: "Color Sense" },
-                { id: "about", text: "About" },
+                { id: "discover", text: "Discover" },
+                { id: "feedback", text: "Feedback" },
               ] as const
             ).map((item) => (
               <a
@@ -1448,6 +1449,12 @@ export default function App() {
       <main ref={mainRef} id="main-content" tabIndex={-1}>
         {route === "home" ? (
           <Home />
+        ) : route === "discover" ? (
+          <FeatureDiscovery />
+        ) : route === "feedback" ? (
+          <Feedback connected={connected} />
+        ) : route === "admin" ? (
+          <OwnerDashboard connected={connected} />
         ) : route === "about" ? (
           <About />
         ) : (
@@ -1456,7 +1463,7 @@ export default function App() {
       </main>
       <footer>
         <Brand small />
-        <span>Your camera. Your color sensor. Your data.</span>
+        <a href="#about">About &amp; privacy</a>
         <a
           href="https://github.com/QiZhang1102/Pocket_Sense"
           target="_blank"
