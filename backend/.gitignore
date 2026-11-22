@@ -1,0 +1,5 @@
+.local/
+.wrangler/
+.dev.vars*
+wrangler.jsonc
+*.sqlite*

@@ -1,0 +1,20 @@
+{
+  "name": "pocketsense-feedback",
+  "main": "worker.mjs",
+  "compatibility_date": "2025-04-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "vars": { "ALLOWED_ORIGINS": "https://qizhang1102.github.io" },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "pocketsense-feedback",
+    "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+    "migrations_dir": "migrations"
+  }],
+  "ratelimits": [{
+    "name": "SUBMISSIONS",
+    "namespace_id": "1201",
+    "simple": { "limit": 60, "period": 60 }
+  }]
+}
