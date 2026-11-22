@@ -4,7 +4,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dist = join(root, "dist");
+const dist = process.argv[2] ? resolve(process.argv[2]) : join(root, "dist");
 
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
