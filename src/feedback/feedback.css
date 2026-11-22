@@ -1,0 +1,248 @@
+.fb-page {
+  max-width: 1040px;
+  margin: auto;
+  padding: clamp(2rem, 6vw, 5rem) 0 4rem;
+  color: #203e34;
+}
+.fb-intro {
+  max-width: 690px;
+  margin-bottom: 2rem;
+}
+.fb-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #e1ece3;
+  color: #28654f;
+  margin-bottom: 1rem;
+}
+.fb-intro h1 {
+  font-size: clamp(2.5rem, 6vw, 4.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.06em;
+}
+.fb-intro p {
+  margin-top: 1rem;
+  font-size: 1.06rem;
+  color: #4d6559;
+}
+.fb-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2.1fr) minmax(200px, 0.95fr);
+  align-items: start;
+  gap: 20px;
+}
+.fb-panel,
+.fb-aside {
+  border: 1px solid #d8e2da;
+  border-radius: 20px;
+  padding: clamp(18px, 3vw, 32px);
+  background: #fff;
+  min-width: 0;
+}
+.fb-aside {
+  background: #eaf1e8;
+  color: #2b5543;
+}
+.fb-aside h2,
+.fb-login h2,
+.fb-receipt h2 {
+  font-size: 1.4rem;
+  margin: 0.7rem 0;
+}
+.fb-aside p,
+.fb-login p,
+.fb-receipt p {
+  font-size: 0.92rem;
+  margin: 0.7rem 0;
+}
+.fb-aside a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 0.9rem;
+}
+.fb-fields,
+.fb-filters {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.fb-pair,
+.fb-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.fb-page label {
+  display: block;
+  font-size: 0.89rem;
+  font-weight: 600;
+  min-width: 0;
+}
+.fb-page label small {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #52675b;
+}
+.fb-page :is(select, input, textarea) {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--ink);
+  padding: 10px 11px;
+  border: 1px solid #b8c9bb;
+  border-radius: 8px;
+  background: white;
+  min-height: 44px;
+}
+.fb-page textarea {
+  resize: vertical;
+  line-height: 1.5;
+  outline-offset: 3px;
+}
+.fb-page textarea:focus-visible {
+  outline: 2px solid var(--green);
+}
+.fb-actions,
+.fb-toolbar > div,
+.fb-record header,
+.fb-record-foot,
+.fb-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.fb-actions {
+  justify-content: space-between;
+}
+.fb-text {
+  background: transparent;
+  color: #285940;
+  border: 0;
+  padding: 10px 4px;
+  font-weight: 550;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.fb-note,
+.fb-error {
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: #edf3eb;
+  font-size: 0.9rem;
+}
+.fb-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.fb-error {
+  color: #823722;
+  background: #fff0e9;
+}
+.fb-trap {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.fb-login {
+  max-width: 460px;
+  display: grid;
+  gap: 12px;
+}
+.fb-login :is(p, h2) {
+  margin: 0;
+}
+.fb-login button {
+  justify-self: start;
+}
+.fb-receipt {
+  max-width: 600px;
+}
+.fb-receipt button {
+  margin-top: 1rem;
+}
+.fb-inbox {
+  display: grid;
+  gap: 18px;
+}
+.fb-toolbar > div {
+  justify-content: flex-end;
+}
+.fb-filters {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: #eaf1e8;
+  border-radius: 14px;
+  padding: 16px;
+}
+.fb-filters legend {
+  float: left;
+  width: 100%;
+  grid-column: 1/-1;
+  font-weight: 600;
+}
+.fb-record header,
+.fb-record-foot {
+  justify-content: space-between;
+}
+.fb-record header h2 {
+  font-size: 1.25rem;
+}
+.fb-record time,
+.fb-counter {
+  color: #536b5d;
+  font-size: 0.88rem;
+}
+.fb-meta span {
+  font-size: 0.8rem;
+  color: #486052;
+  margin-top: 8px;
+}
+.fb-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 1rem 0;
+}
+.fb-record-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.fb-record-foot label {
+  margin-left: auto;
+}
+@media (max-width: 760px) {
+  .fb-layout {
+    grid-template-columns: 1fr;
+  }
+  .fb-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .fb-pair {
+    grid-template-columns: 1fr;
+  }
+  .fb-actions button {
+    min-height: 44px;
+  }
+  .fb-record header {
+    align-items: start;
+    flex-direction: column;
+  }
+}
