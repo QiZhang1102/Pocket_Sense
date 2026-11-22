@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -50,8 +50,9 @@ test("submit, retrieve, update, restart, and recover through actual HTTP and per
   const errorResponse = await fetch(base + "/admin/feedback");
   assert.equal(errorResponse.status, 401);
   assert.doesNotMatch(await errorResponse.text(), /fixture@/);
+  const retryKey = randomUUID();
   const post = await fetch(base + "/feedback", {
-    method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(feedback),
+    method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "Idempotency-Key": retryKey }, body: JSON.stringify(feedback),
   });
   assert.equal(post.status, 201);
   assert.equal(post.headers.get("access-control-allow-origin"), origin);
@@ -64,6 +65,12 @@ test("submit, retrieve, update, restart, and recover through actual HTTP and per
   assert.equal(changed.status, 200);
   await close();
   base = await open();
+  const retry = await fetch(base + "/feedback", {
+    method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": retryKey },
+    body: JSON.stringify(feedback),
+  });
+  assert.equal(retry.status, 201);
+  assert.deepEqual(await retry.json(), result);
   const list = await fetch(base + "/admin/feedback?feature=calibration&category=feature&status=reviewing", { headers: bearer });
   assert.equal(list.status, 200);
   assert.equal(list.headers.get("cache-control"), "no-store");
@@ -160,4 +167,29 @@ test("missing credentials, database outage or edge overload cannot yield success
     ...env, SUBMISSIONS: { limit: async ({ key }) => ({ success: key !== "feedback" }) },
   });
   assert.equal(response.status, 429);
+});
+
+test("one draft key recovers one receipt through concurrent retries, conflicts and full quotas", async (t) => {
+  const env = fixture(t);
+  const id = randomUUID();
+  const submit = (data, retryKey) => worker.fetch(request("/feedback", "POST", data,
+    retryKey ? { "Idempotency-Key": retryKey } : {}), env);
+  const responses = await Promise.all(Array.from({ length: 6 }, () => submit(feedback, id)));
+  for (const response of responses) {
+    assert.equal(response.status, 201);
+    assert.deepEqual(await response.json(), { id });
+  }
+  const invalid = await submit(feedback, "not-a-draft-key");
+  assert.equal(invalid.status, 400);
+  const conflict = await submit({ ...feedback, message: "A different submission" }, id);
+  assert.equal(conflict.status, 409);
+  assert.doesNotMatch(await conflict.text(), /fixture@|chart guide/);
+  for (let i = 0; i < 11; i++) assert.equal((await submit(feedback)).status, 201);
+  assert.equal((await submit(feedback)).status, 429);
+  assert.equal((await submit(feedback, id)).status, 201);
+  const read = await worker.fetch(request("/admin/feedback", "GET", undefined, bearer), env);
+  const { items } = await read.json();
+  assert.equal(items.length, 12);
+  assert.equal(items.filter((row) => row.id === id).length, 1);
+  assert.equal(items.find((row) => row.id === id).message, feedback.message);
 });

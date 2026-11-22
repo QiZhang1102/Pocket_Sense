@@ -60,11 +60,11 @@ Cloudflare maintains the [D1 binding and setup guide](https://developers.cloudfl
 
 ## Access, filtering and privacy
 
-The intake route accepts a JSON object containing the selected category, message, and any explicitly entered feature, email and integer rating. A honeypot must be empty. The Worker rejects unrecognized fields and limits the body to 24 KiB, the message to 4,000 UTF-16 code units and the email to 254. The database adds a random **submission** ID, UTC timestamp and review status. There are no file, profile, analysis, device ID or IP columns. Operators should ask users to leave medical details and identifying sample data out of free text.
+The intake route accepts a JSON object containing the selected category, message, and any explicitly entered feature, email and integer rating. A honeypot must be empty. The Worker rejects unrecognized fields and limits the body to 24 KiB, the message to 4,000 UTF-16 code units and the email to 254. Each stored row has a random **submission** ID, a server-side UTC timestamp and a review status. The browser creates one UUID v4 for a draft and sends it in the optional `Idempotency-Key` header. If acknowledgement is lost, an explicit retry with the same key and content recovers the original receipt. A conflicting payload gets HTTP 409. This key identifies a single submission; it rotates when the draft content changes. Clients omitting the header receive a server-generated UUID. There are no file, profile, analysis, device ID or IP columns. Operators should ask users to leave medical details and identifying sample data out of free text.
 
 | Route | Access and response |
 | --- | --- |
-| `POST /feedback` | Public submission. Returns HTTP 201 and the generated ID after D1 confirms insertion. |
+| `POST /feedback` | Public submission. Returns HTTP 201 and a receipt ID after D1 confirms storage. |
 | `GET /admin/feedback` | Owner bearer key. Returns 100 items per page and a nullable next offset. Accepts category, feature, status, date order (`sort=newest` or `oldest`) and offset. |
 | `PATCH /admin/feedback/:id` | Owner bearer key. Accepts a single status. Valid values are `new`, `reviewing`, `planned`, `completed` and `declined`. |
 
@@ -88,4 +88,4 @@ All three can serve a static frontend over HTTPS. For this pilot, the small data
 
 ## Verification evidence
 
-Six backend test groups include a real localhost HTTP request, insertion into a temporary SQLite database, server restart, authenticated retrieval, status updates and rejected anonymous requests. Additional cases cover capped concurrent writes, optional fields, malformed or oversized submissions, forbidden fields, pagination, filters, date order and storage failures. A second smoke test applied the migration with Wrangler 4.166.0 and exercised real local workerd/D1 bindings through HTTP. It observed 201 on submission, 401 on anonymous list and 200 on owner update, then retrieved the matching stored record using a status filter. These tests used synthetic records. Production acceptance requires the owner-operated check in step 5.
+Seven backend test groups include a real localhost HTTP request, insertion into a temporary SQLite database, server restart, authenticated retrieval, status updates and rejected anonymous requests. Additional cases cover capped concurrent writes, per-draft idempotency, optional fields, malformed or oversized submissions, forbidden fields, pagination, filters, date order and storage failures. A second smoke test applied the migration with Wrangler 4.166.0 and exercised real local workerd/D1 bindings through HTTP. It observed 201 on submission, 401 on anonymous list and 200 on owner update, then retrieved the matching stored record using a status filter. These tests used synthetic records. Production acceptance requires the owner-operated check in step 5.

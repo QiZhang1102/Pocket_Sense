@@ -84,7 +84,13 @@ async function submit(request, env) {
   }
   const data = await readJson(request, fields);
   validateFeedback(data);
-  const id = crypto.randomUUID();
+  // A random key belongs to one draft and survives an explicit retry after a lost reply.
+  const retryKey = request.headers.get("Idempotency-Key");
+  if (retryKey !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(retryKey)) {
+    throw new ApiError(400, "Invalid submission key.");
+  }
+  const id = retryKey?.toLowerCase() ?? crypto.randomUUID();
+  const values = [data.category, data.feature ?? null, data.message.trim(), data.email ?? null, data.rating ?? null];
   const now = Date.now();
   // One atomic write in D1 enforces the global cap across concurrent Worker locations.
   const result = await env.DB.prepare(`
@@ -92,11 +98,21 @@ async function submit(request, env) {
     SELECT ?, ?, ?, ?, ?, ?, ?
     WHERE (SELECT COUNT(*) FROM feedback WHERE createdAt >= ?) < 12
       AND (SELECT COUNT(*) FROM feedback WHERE createdAt >= ?) < 240
-  `).bind(id, new Date(now).toISOString(), data.category, data.feature ?? null,
-    data.message.trim(), data.email ?? null, data.rating ?? null,
+    ON CONFLICT(id) DO NOTHING
+  `).bind(id, new Date(now).toISOString(), ...values,
     new Date(now - 60000).toISOString(), new Date(now - 86400000).toISOString()).run();
-  if (result.meta.changes !== 1) throw new ApiError(429, "The feedback inbox is busy. Please try again later.");
-  return { id };
+  if (result.meta.changes === 1) return { id };
+  if (retryKey) {
+    // Check only the claimed receipt, including after a quota fills or a status changes.
+    // Never return or overwrite the first submission's private fields.
+    const { results } = await env.DB.prepare(`
+      SELECT (category = ? AND feature IS ? AND message = ? AND email IS ? AND rating IS ?) AS matches
+      FROM feedback WHERE id = ?
+    `).bind(...values, id).all();
+    if (results[0]?.matches) return { id };
+    if (results.length) throw new ApiError(409, "This submission key already belongs to different feedback.");
+  }
+  throw new ApiError(429, "The feedback inbox is busy. Please try again later.");
 }
 
 async function list(db, params) {
@@ -133,7 +149,7 @@ async function route(request, env, headers) {
   const allowedMethod = publicWrite ? "POST" : privateList ? "GET" : "PATCH";
   if (request.method === "OPTIONS") {
     headers.set("Access-Control-Allow-Methods", allowedMethod);
-    headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key");
     return new Response(null, { status: 204, headers });
   }
   if (request.method !== allowedMethod) throw new ApiError(405, "Method unavailable.");
