@@ -45,6 +45,7 @@ function OwnerSession() {
   const [saving, setSaving] = useState(false),
     [notice, setNotice] = useState("");
   function lock() {
+    setBusy(false);
     setKey("");
     setVerified(false);
     setEntry("");

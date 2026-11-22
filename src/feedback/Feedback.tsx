@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -24,6 +24,7 @@ const blank = {
   message: "",
   email: "",
   rating: "",
+  submissionKey: "",
 };
 function readDraft(): typeof blank {
   try {
@@ -33,6 +34,11 @@ function readDraft(): typeof blank {
       category: Object.hasOwn(categories, d.category) ? d.category : "general",
       feature: Object.hasOwn(features, d.feature) ? d.feature : "",
       message: typeof d.message === "string" ? d.message.slice(0, 4000) : "",
+      submissionKey:
+        typeof d.submissionKey === "string" &&
+        /^[a-f0-9-]{36}$/i.test(d.submissionKey)
+          ? d.submissionKey
+          : "",
       email: typeof d.email === "string" ? d.email.slice(0, 254) : "",
       rating: /^[1-5]$/.test(d.rating) ? String(d.rating) : "",
     };
@@ -49,23 +55,26 @@ export function Feedback({ connected }: { connected: boolean }) {
   const message = useRef<HTMLTextAreaElement>(null);
   const website = useRef<HTMLInputElement>(null);
   const pending = useRef(false);
-  useEffect(() => {
+  function remember(next: typeof blank) {
+    setDraft(next);
     try {
       if (
         Object.keys(blank).some(
           (k) =>
-            draft[k as keyof typeof blank] !== blank[k as keyof typeof blank],
+            next[k as keyof typeof blank] !== blank[k as keyof typeof blank],
         )
-      )
-        localStorage.setItem(draftKey, JSON.stringify(draft));
-      else localStorage.removeItem(draftKey);
+      ) {
+        localStorage.setItem(draftKey, JSON.stringify(next));
+      } else {
+        localStorage.removeItem(draftKey);
+      }
       setSaveFailed(false);
     } catch {
       setSaveFailed(true);
     }
-  }, [draft]);
+  }
   const update = (key: keyof typeof draft, value: string) => {
-    setDraft((d) => ({ ...d, [key]: value }));
+    remember({ ...draft, [key]: value, submissionKey: "" });
     setError("");
   };
   async function submit(event: FormEvent) {
@@ -80,9 +89,17 @@ export function Feedback({ connected }: { connected: boolean }) {
     setBusy(true);
     setError("");
     try {
+      const submitted = {
+        ...draft,
+        submissionKey: draft.submissionKey || crypto.randomUUID(),
+      };
+      remember(submitted);
       const response = await api("/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": submitted.submissionKey,
+        },
         body: JSON.stringify({
           category: draft.category,
           ...(draft.feature && { feature: draft.feature }),
@@ -103,7 +120,7 @@ export function Feedback({ connected }: { connected: boolean }) {
         );
       // Clear even if the user navigated to another tool while the request was in flight.
       try {
-        if (localStorage.getItem(draftKey) === JSON.stringify(draft))
+        if (localStorage.getItem(draftKey) === JSON.stringify(submitted))
           localStorage.removeItem(draftKey);
       } catch {
         /* storage may be disabled */
@@ -136,7 +153,10 @@ export function Feedback({ connected }: { connected: boolean }) {
           <p>Thank you for helping shape PocketSense.</p>
           <button
             className="button secondary"
-            onClick={() => setReceived(false)}
+            onClick={() => {
+              setDraft(readDraft());
+              setReceived(false);
+            }}
           >
             Write another message
           </button>
@@ -191,6 +211,8 @@ export function Feedback({ connected }: { connected: boolean }) {
                   Email for follow-up <small>(optional)</small>
                   <input
                     type="email"
+                    pattern={String.raw`[^\s@]+@[^\s@]+\.[^\s@]+`}
+                    title="Use an address such as name@example.com"
                     maxLength={254}
                     autoComplete="email"
                     value={draft.email}
@@ -256,7 +278,7 @@ export function Feedback({ connected }: { connected: boolean }) {
                   className="fb-text"
                   type="button"
                   onClick={() => {
-                    setDraft(blank);
+                    remember(blank);
                     setError("");
                     message.current?.focus();
                   }}

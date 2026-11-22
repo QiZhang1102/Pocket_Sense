@@ -87,7 +87,9 @@ export async function api(path: string, init: RequestInit = {}) {
     if (response.status === 401 || response.status === 403)
       throw new ApiError(
         response.status,
-        "Access denied. Check your owner key and the allowed site address.",
+        path.startsWith("/admin/")
+          ? "Access denied. Check your owner key and the allowed site address."
+          : "This website is not enabled for feedback submissions.",
       );
     if (response.status === 429)
       throw new ApiError(
