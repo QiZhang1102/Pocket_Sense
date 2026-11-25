@@ -124,8 +124,18 @@ test("touch swipes advance and return on a phone-sized viewport", async ({
           touchPoints: [{ x: box!.x + box!.width * fraction, y }],
         });
       await send("touchStart", from);
-      for (let step = 1; step <= 9; step++)
+      for (let step = 1; step <= 9; step++) {
         await send("touchMove", from + ((to - from) * step) / 9);
+        // Let Chromium sample the gesture across frames, as with physical touch input.
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => resolve()),
+              ),
+            ),
+        );
+      }
       await session.send("Input.dispatchTouchEvent", {
         type: "touchEnd",
         touchPoints: [],
@@ -144,6 +154,9 @@ test("touch swipes advance and return on a phone-sized viewport", async ({
     await expect(visibleSlide(page).getByRole("heading")).toHaveText(
       "pH Sense",
     );
+    await expect
+      .poll(() => viewport.evaluate((el) => Math.abs(el.scrollLeft)))
+      .toBeLessThan(2);
   } finally {
     await context.close();
   }
