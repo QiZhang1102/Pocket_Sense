@@ -6,7 +6,10 @@ export default defineConfig({
   base: "./",
   plugins: [react()],
   build: { target: "es2022" },
-  server: { host: "127.0.0.1" },
+  server: {
+    host: "127.0.0.1",
+    fs: { deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "**/backend/**", "**/.wrangler/**", "**/*.sqlite*"] },
+  },
   preview: { host: "127.0.0.1" },
   test: {
     include: ["src/**/*.test.ts"],

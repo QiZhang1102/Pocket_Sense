@@ -4,7 +4,7 @@
 
 Target: https://qizhang1102.github.io/Pocket_Sense/
 
-The application has no sign-in or analysis backend. A successful deployment is required before sharing this URL. Photos are processed on-device; opening the repository URL shows source code rather than the application.
+Scientific analysis runs locally. Online feedback uses a separately configured API and owner credential. A successful deployment is required before sharing this URL. Photos are processed on-device; opening the repository URL shows source code rather than the application.
 
 ## GitHub Pages
 
@@ -15,6 +15,10 @@ The application has no sign-in or analysis backend. A successful deployment is r
 5. Open the public URL in a fresh browser tab.
 
 Do not add GitHub’s Static HTML publishing template. It uploads the repository root without compiling React/TypeScript and may replace the working app with a blank page.
+
+## Connect feedback
+
+Follow [Feedback deployment](FEEDBACK_DEPLOYMENT.md) to create the database, apply migrations, set the Worker secret and allow the Pages origin. Add the Worker HTTPS URL as the repository Actions variable `VITE_FEEDBACK_API_URL`. Rebuild the Pages site after changing this variable. A static deployment without the variable supports discovery, scientific analysis and local feedback drafts. To verify a configured deployment, submit an agreed test message, then retrieve it from `#admin` and change its status.
 
 ## Other static hosting
 

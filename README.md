@@ -8,7 +8,13 @@ This edition integrates the team version from [Neutralizer-0618/PocketSense](htt
 
 PocketSense is a browser-local color analysis app with two workspaces: **Color Sense**, for numerical image sampling and representative palettes, and **pH Sense**, for comparing a photographed strip region with a compatible reference color profile. It is designed for an exploratory university demonstration, with transparent scientific limits.
 
-**[Deployment and sharing](docs/DEPLOYMENT.md)**
+**[Deployment and sharing](docs/DEPLOYMENT.md)** · **[Feedback service and owner setup](docs/FEEDBACK_DEPLOYMENT.md)** · **[Product research and roadmap](docs/POCKETSENSE_FUTURE_ROADMAP.md)**
+
+## Explore and give feedback
+
+Open **Discover** to move between available instruments and exploratory research concepts by touch, keyboard or the previous/next controls. Both instruments remain directly accessible in the navigation. **Feedback** accepts a suggestion or report, with optional contact email and rating. An offline draft stays on the device until its author returns and submits it.
+
+For a local end-to-end demo, run `npm run dev` and, in a second terminal in this checkout, `node backend/local.mjs` with Node 24. Open **Feedback** on the local Vite site to submit. To review it, visit `/#admin` on the same site and use the owner key from the file whose path the backend prints. The server binds to loopback and stores records and the generated owner key in the user's application-data directory. In production, the Worker stores submissions in D1. Connect the Pages build to that Worker using the deployment guide linked above.
 
 ## Run locally
 
@@ -37,7 +43,7 @@ npm run build
 npm run preview
 ```
 
-The repository contains every source file, bundled asset, dependency lockfile, test fixture, and build/deployment configuration required by these commands. `npm ci` reconstructs platform-specific dependencies in `node_modules/`, and `npm run build` produces `dist/`. Neither generated folder needs to be copied from another computer. No app-specific credentials, backend, or environment file is required. The initial dependency installation needs registry access.
+The repository contains every source file, bundled asset, dependency lockfile, test fixture, and build/deployment configuration required by these commands. `npm ci` reconstructs platform-specific dependencies in `node_modules/`, and `npm run build` produces `dist/`. Neither generated folder needs to be copied from another computer. The scientific workspaces run standalone. The initial dependency installation needs registry access.
 
 The offline worker is enabled in production only. A service worker requires HTTPS or a browser-trusted localhost origin; opening `dist/index.html` directly is insufficient.
 
@@ -74,7 +80,7 @@ See [Scientific methods and tests](docs/SCIENCE.md) for formulas, reference sour
 
 ## Privacy and offline operation
 
-Photos are decoded and analyzed locally. They are not uploaded by the app or persistently stored by default. Removing an image or leaving the app releases its in-memory working data. Custom reference profiles are stored in this browser's local storage. Meter-comparison records stay in memory for the current session; export them before leaving or reloading. Exported files are saved only when you request an export. There are no accounts, trackers, remote databases, runtime CDN assets, or external image-processing services.
+Photos are decoded and analyzed locally. They are not uploaded by the app or persistently stored by default. Removing an image or leaving the app releases its in-memory working data. Custom reference profiles are stored in this browser's local storage. Meter-comparison records stay in memory for the current session; export them before leaving or reloading. Exported files are saved only when you request an export. The feedback service receives the category, message and any optional fields a user submits. The server assigns a receipt ID, time and review status. Owners can read submissions and export the current inbox page. The application keeps images, measurements and profiles outside this service. Drafts may include an email address and can be removed with **Clear draft**. See the [privacy details](docs/PRIVACY.md).
 
 The service worker caches the bundled application files after a successful first online load. The generated cache is versioned from build contents. Uploaded photos are never put in the application cache. Browser storage can be cleared or evicted by the browser, and private-browsing modes may restrict persistence. Keep exported copies of profiles you need to preserve.
 
@@ -94,6 +100,7 @@ New releases install in the background. Close all open PocketSense tabs and reop
 npm run lint
 npm run typecheck
 npm test
+node --test backend/api.test.mjs
 npm run build
 npx playwright install chromium
 npm run test:e2e
@@ -119,12 +126,14 @@ Repository owner setup:
 
 Only `.github/workflows/deploy.yml` should publish this application. Do not add the Static HTML template, which uploads uncompiled repository files and can overwrite the working application. The workflow builds and checks the app, uploads `dist/` as a Pages artifact, and deploys with the official Pages actions. GitHub documents this setup in [Using custom workflows with GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages). Hosting availability for a private repository depends on the account and repository settings.
 
-Pull requests and non-`main` pushes run the separate **Verify PocketSense** workflow. The application itself does not require secrets. No force-push or direct overwrite of `main` is needed.
+Pull requests and non-`main` pushes run the separate **Verify PocketSense** workflow. The Pages frontend uses only the public feedback API URL. The owner secret belongs in the Worker secret store. No force-push or direct overwrite of `main` is needed.
 
 ## Project structure
 
 ```text
-src/components/       Image interaction and application components
+backend/              Feedback API, D1 migrations and local SQLite server
+src/feedback/         Submission form and owner dashboard
+src/components/       Discovery and image interaction components
 src/lib/              Scientific algorithms and unit tests
 public/               Manifest and locally bundled icons
 scripts/build-sw.mjs  Content-versioned offline precache generator
