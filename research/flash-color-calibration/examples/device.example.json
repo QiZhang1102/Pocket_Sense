@@ -1,0 +1,10 @@
+{
+  "device": "REPLACE_WITH_ACTUAL_DEVICE",
+  "camera": "REPLACE_WITH_ACTUAL_CAMERA_AND_LENS",
+  "input_domain": "linear_camera_rgb",
+  "capture_settings": {"exposure_s": 0.01, "iso": 100, "aperture": 1.8, "white_balance": "raw_not_applied"},
+  "target": "REPLACE_WITH_CHARACTERIZED_TARGET_AND_REFERENCE_DATA_SOURCE",
+  "date": "2026-11-26",
+  "scale_reference": "REPLACE_WITH_DOCUMENTED_INTENSITY_NORMALIZATION_REFERENCE",
+  "note": "Metadata template only, not a calibrated device profile. Replace all illustrative acquisition values with actual calibration conditions."
+}
