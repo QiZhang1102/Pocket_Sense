@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "device": "REPLACE_WITH_ACTUAL_DEVICE",
+  "camera": "REPLACE_WITH_ACTUAL_CAMERA_AND_LENS",
+  "input_domain": "linear_camera_rgb",
+  "source_kind": "unverified_capture",
+  "scene": "paper",
+  "ambient": {"exposure_s": 0.01, "iso": 100, "aperture": 1.8, "white_balance": "raw_not_applied", "flash": false},
+  "flash": {"exposure_s": 0.01, "iso": 100, "aperture": 1.8, "white_balance": "raw_not_applied", "flash": true},
+  "ambient_stable": false,
+  "geometry_locked": false,
+  "linear_confirmed": false,
+  "alignment_confirmed": false,
+  "scale_reference": "unknown",
+  "note": "Template settings only: replace with actual captures; set assertions true only when established. No measurements are included."
+}

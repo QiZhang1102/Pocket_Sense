@@ -1,0 +1,22 @@
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv/
+results/
+runs/
+data/
+fixtures-generated/
+# Images, sensor arrays and experimental data remain outside ordinary Git history.
+*.npy
+*.npz
+*.dng
+*.DNG
+*.nef
+*.cr2
+*.arw
+*.raw
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
